@@ -1,8 +1,10 @@
 # NexusLogistics for Dyson Sphere Program
 
-**Version: 1.0.0**
+**Version:** 1.0.0
 
-This mod is an unofficial update and translation of the original PackageLogistic mod, expanded with new features, quality-of-life improvements, and compatibility with the latest versions of Dyson Sphere Program. It provides a centralized, "magic" logistics network that simplifies resource management across your entire cluster.
+An unofficial update and feature-rich continuation of the original **PackageLogistic** mod by `qlvlp-com`. NexusLogistics provides a centralized, "magic" logistics network that dramatically simplifies resource management across your entire star cluster, allowing you to focus on designing and expanding your factory.
+
+---
 
 ## A Note on Permissions and Original Work
 
@@ -19,26 +21,34 @@ This mod is built upon the foundation of the PackageLogistic mod by qlvlp-com. A
 - **Original Author:** qlvlp-com
 - **Original Mod:** PackageLogistic
 
-## Features
+---
 
-NexusLogistics creates a global, invisible storage network that automatically supplies all your production buildings and personal inventory needs.
+## How It Works
 
-- **Central Remote Storage:** All items supplied by logistics stations, storage boxes, and miners are pooled into a central "nexus" storage.
-- **Automatic Supply Network:** Buildings that require items (Assemblers, Labs, Power Plants, Turrets, etc.) will automatically draw what they need from the nexus.
-- **Personal Logistics:** Automatically replenishes filtered items in your main inventory and fills requests in your personal logistics slots.
-- **Automatic Proliferation:** Items added to the network can be automatically sprayed with Proliferator MK.I, II, or III. This can be toggled to consume proliferator points or be free.
-- **Item Limit Control:** A new UI allows you to set a storage limit for every item in the network, preventing overproduction of specific resources.
-- **"Infinite" Cheats:** Optional toggles for infinite items, minerals, buildings, soil pile, ammo, and fleet units.
-- **In-Game GUI:** Manage all features through two intuitive in-game windows.
+NexusLogistics creates a global, invisible storage network that acts as a central hub for all your resources. Here's the basic concept:
+
+* **Producers Add to the Network:** Any building that generates items (like Miners, Smelters, Assemblers, and Logistics Stations set to "Supply") will automatically add their output to the central "Nexus" storage.
+* **Consumers Take from the Network:** Any building that requires items (like Assemblers, Labs, Power Plants, Turrets, and Logistics Stations set to "Demand") will automatically draw what they need from the Nexus.
+* **It's All Connected:** This happens instantaneously and across any distance, without the need for logistics vessels for the items managed by this mod. Your entire industrial empire is treated as one interconnected inventory.
+
+## Key Features
+
+* **Central Remote Storage:** All items supplied by logistics stations, storage boxes, and miners are pooled into a central "nexus" storage.
+* **Automatic Supply Network:** Buildings that require items (Assemblers, Labs, Power Plants, Turrets, etc.) will automatically draw what they need from the nexus.
+* **Personal Logistics:** Automatically replenishes filtered items in your main inventory and fills requests in your personal logistics slots.
+* **Automatic Proliferation:** Items added to the network can be automatically sprayed with Proliferator MK.I, II, or III. This can be toggled to consume proliferator points or be free.
+* **Item Limit Control:** A new UI allows you to set a storage limit for every item in the network, preventing overproduction of specific resources.
+* **"Infinite" Cheats:** Optional toggles for infinite items, minerals, buildings, soil pile, ammo, and fleet units.
+* **In-Game GUI:** Manage all features through two intuitive in-game windows.
 
 ## Installation
 
 This mod requires the following to be installed first:
 
-- BepInEx
-- DSPModSave
+-   BepInEx
+-   DSPModSave
 
-1.  Make sure you have both BepInEx and DSPModSave installed for Dyson Sphere Program.
+1.  Ensure you have both **BepInEx** and **DSPModSave** installed for Dyson Sphere Program.
 2.  Download the latest release of `NexusLogistics.dll` from the Releases page.
 3.  Place the `NexusLogistics.dll` file into your `Dyson Sphere Program/BepInEx/plugins/` folder.
 4.  Launch the game. A configuration file will be generated at `Dyson Sphere Program/BepInEx/config/com.Sidaril.dsp.NexusLogistics.cfg` on the first run.
@@ -47,17 +57,39 @@ This mod requires the following to be installed first:
 
 Once in-game, you can use the following hotkeys to access the mod's features.
 
--   **Toggle Main Window:** `LeftControl + L`
-    -   This window contains the main toggles for enabling the mod, auto-replenishment, auto-spraying, and cheat options.
--   **Toggle Storage Window:** `LeftControl + K`
-    -   This window shows you the current contents of your central remote storage. You can browse items by category (Raw, Intermediates, Buildings, etc.).
-    -   **Set Item Limits:** In this window, you can click on the number in the "Limit" column for any item and type a new value to cap how much of that item the network will store.
+* **Toggle Main Window:** `LeftControl + L`
+    * This window contains the main toggles for enabling the mod, auto-replenishment, auto-spraying, and cheat options.
+* **Toggle Storage Window:** `LeftControl + K`
+    * This window shows you the current contents of your central remote storage. You can browse items by category (Raw, Intermediates, Buildings, etc.).
+    * **Set Item Limits:** In this window, you can click on the number in the "Limit" column for any item and type a new value to cap how much of that item the network will store.
 
-## Main Panels Explained
+### UI Panels Explained
 
--   **Main Options:** Core features like enabling the mod, auto-replenishing your inventory, and managing fuel for thermal power plants.
--   **Items:** Contains the "infinite" toggles for buildings, minerals, general items, and soil pile.
--   **Combat:** Contains the "infinite" toggles for ammo and fleet units, plus a button to clear non-essential items from Battlefield Analysis Bases.
+#### Main Options Panel
+
+* **Enable Mod:** The master switch for the entire mod.
+* **Auto Replenish:** Automatically replenishes items in your inventory that have a filter set (middle-click a slot to set a filter).
+* **Auto Spray:** Enables automatic proliferation of items in the network.
+    * **Consume Proliferator:** If checked, this will consume proliferator points from the sprayers you have in the network. If unchecked, proliferation is free.
+* **Recover from storage boxes/tanks:** When enabled, the mod will pull items from standard storage containers and liquid tanks into the network.
+* **Auto-Replenish Thermal Power Plant Fuel:** Automatically supplies fuel to your thermal power plants. You can select a specific fuel type or leave it on "Auto" to let the mod intelligently choose based on your resource reserves.
+
+#### Items Panel
+
+Contains the "infinite" resource toggles. Useful for testing or sandbox-style gameplay.
+
+* **Infinite Buildings**
+* **Infinite Minerals**
+* **Infinite Items**
+* **Infinite Soil Pile**
+
+#### Combat Panel
+
+Contains "infinite" toggles for military supplies and a utility button.
+
+* **Infinite Ammo**
+* **Infinite Fleet**
+* **Clear Battlefield Analysis Base:** Removes items from Battlefield Analysis Bases that you have marked to not be picked up, keeping their storage clean.
 
 ## Building from Source (Optional)
 
