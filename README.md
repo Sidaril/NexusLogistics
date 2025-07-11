@@ -1,6 +1,6 @@
 # NexusLogistics for Dyson Sphere Program
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 
 An unofficial update and feature-rich continuation of the original **PackageLogistic** mod by `qlvlp-com`. NexusLogistics provides a centralized, "magic" logistics network that dramatically simplifies resource management across your entire star cluster, allowing you to focus on designing and expanding your factory.
 
@@ -99,3 +99,17 @@ If you wish to build the mod yourself:
 2.  Open the `.sln` file in Visual Studio.
 3.  You will need to add references to the game's `Assembly-CSharp.dll`, `UnityEngine.dll`, `UnityEngine.CoreModule.dll`, `UnityEngine.UI.dll`, and `UnityEngine.UIModule.dll`, as well as the `0Harmony.dll` from BepInEx and `DSPModSave.dll` from crecheng.
 4.  Build the solution. The `NexusLogistics.dll` will be generated in the `bin/Debug` or `bin/Release` folder.
+
+## Changelog
+
+### Version 1.0.1
+* **Bug Fix:** Fixed a critical bug that could cause the game to throw an `ArgumentException` error when opening the remote storage window. This was most likely to occur when items were being added to or removed from the network rapidly. The remote storage UI is now stable.
+
+### Version 1.0.0
+* **Initial Release:**
+    * Introduced the central "Nexus" logistics network, a global, invisible storage hub for all resources.
+    * **Automatic Supply:** Buildings automatically draw required items from the Nexus, and producers automatically add their output.
+    * **Personal Logistics:** Added automatic replenishment for filtered items in the player's inventory.
+    * **Automatic Proliferation:** Items can be automatically sprayed with Proliferator, with an option to make it free or consume points.
+    * **Item Limit Control:** Implemented a new UI (`LeftControl + K`) to set storage limits for every item in the network, preventing overproduction.
+    * **In-Game GUI:** Added the main control window (`LeftControl + L`) to manage all mod features, including optional "infinite" resource cheats.

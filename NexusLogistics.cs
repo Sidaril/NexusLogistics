@@ -19,7 +19,7 @@ namespace NexusLogistics
     {
         public const string GUID = "com.Sidaril.dsp.NexusLogistics";
         public const string NAME = "NexusLogistics";
-        public const string VERSION = "1.0.0"; // Version bump for new feature
+        public const string VERSION = "1.0.1"; // Version bump for fix
         
         private const int SAVE_VERSION = 2; // Incremented save version for the new 'limit' field
 
@@ -111,6 +111,8 @@ namespace NexusLogistics
         private ConfigEntry<Boolean> infFleet;
         private ConfigEntry<Boolean> infAmmo;
         Dictionary<EAmmoType, List<int>> ammos = new Dictionary<EAmmoType, List<int>>();
+        
+        private List<KeyValuePair<int, RemoteStorageItem>> storageItemsForGUI = new List<KeyValuePair<int, RemoteStorageItem>>();
 
         #region IModCanSave Implementation
 
@@ -334,6 +336,30 @@ namespace NexusLogistics
             {
                 showStorageGUI = !showStorageGUI;
             }
+
+            if (showStorageGUI)
+            {
+                lock (remoteStorageLock)
+                {
+                    storageItemsForGUI = remoteStorage
+                        .Where(pair => {
+                            if (pair.Value.count <= 0) return false;
+                            ItemProto itemProto = LDB.items.Select(pair.Key);
+                            return itemProto != null && GetItemCategory(itemProto) == selectedStorageCategory;
+                        })
+                        .OrderBy(item => LDB.items.Select(item.Key)?.name ?? string.Empty)
+                        .ToList();
+                }
+
+                // Pre-populate the input strings dictionary to avoid modifying it during the render loop.
+                foreach (var pair in storageItemsForGUI)
+                {
+                    if (!limitInputStrings.ContainsKey(pair.Key))
+                    {
+                        limitInputStrings[pair.Key] = pair.Value.limit.ToString();
+                    }
+                }
+            }
         }
 
         void OnGUI()
@@ -421,53 +447,47 @@ namespace NexusLogistics
 
             try
             {
-                lock(remoteStorageLock)
+                foreach (var pair in storageItemsForGUI)
                 {
-                    // Create a list to iterate over to avoid issues with modifying the collection
-                    var sortedItems = remoteStorage
-                        .Where(pair => {
-                            if (pair.Value.count <= 0) return false;
-                            ItemProto itemProto = LDB.items.Select(pair.Key);
-                            return itemProto != null && GetItemCategory(itemProto) == selectedStorageCategory;
-                        })
-                        .OrderBy(item => LDB.items.Select(item.Key)?.name ?? string.Empty)
-                        .ToList();
+                    int itemId = pair.Key;
+                    RemoteStorageItem item = pair.Value;
+                    
+                    ItemProto itemProto = LDB.items.Select(itemId);
+                    string itemName = itemProto.name;
 
-                    foreach (var pair in sortedItems)
+                    // Initialize the input string for the text field if it doesn't exist
+                    if (!limitInputStrings.ContainsKey(itemId))
                     {
-                        int itemId = pair.Key;
-                        RemoteStorageItem item = pair.Value;
-                        
-                        ItemProto itemProto = LDB.items.Select(itemId);
-                        string itemName = itemProto.name;
+                        limitInputStrings[itemId] = item.limit.ToString();
+                    }
 
-                        // Initialize the input string for the text field if it doesn't exist
-                        if (!limitInputStrings.ContainsKey(itemId))
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Label(itemName, GUILayout.Width(150));
+                    GUILayout.Label(item.count.ToString("N0"), GUILayout.Width(100));
+                    GUILayout.Label(item.inc.ToString("N0"), GUILayout.Width(80));
+
+                    // Create a text field for the limit
+                    string currentInput = limitInputStrings[itemId];
+                    string newInput = GUILayout.TextField(currentInput, GUILayout.Width(100));
+
+                    // If the text has changed, update the dictionary and the item's limit
+                    if (newInput != currentInput)
+                    {
+                        limitInputStrings[itemId] = newInput;
+                        // Try to parse the new limit and update it if valid
+                        if (int.TryParse(newInput, out int newLimit) && newLimit >= 0)
                         {
-                            limitInputStrings[itemId] = item.limit.ToString();
-                        }
-
-                        GUILayout.BeginHorizontal();
-                        GUILayout.Label(itemName, GUILayout.Width(150));
-                        GUILayout.Label(item.count.ToString("N0"), GUILayout.Width(100));
-                        GUILayout.Label(item.inc.ToString("N0"), GUILayout.Width(80));
-
-                        // Create a text field for the limit
-                        string currentInput = limitInputStrings[itemId];
-                        string newInput = GUILayout.TextField(currentInput, GUILayout.Width(100));
-
-                        // If the text has changed, update the dictionary and the item's limit
-                        if (newInput != currentInput)
-                        {
-                            limitInputStrings[itemId] = newInput;
-                            // Try to parse the new limit and update it if valid
-                            if (int.TryParse(newInput, out int newLimit) && newLimit >= 0)
+                            // This lock is still necessary for thread-safe modification
+                            lock(remoteStorageLock)
                             {
-                                item.limit = newLimit;
+                                if(remoteStorage.ContainsKey(itemId))
+                                {
+                                    remoteStorage[itemId].limit = newLimit;
+                                }
                             }
                         }
-                        GUILayout.EndHorizontal();
                     }
+                    GUILayout.EndHorizontal();
                 }
             }
             catch(Exception e)
