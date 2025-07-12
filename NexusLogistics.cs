@@ -19,7 +19,7 @@ namespace NexusLogistics
     {
         public const string GUID = "com.Sidaril.dsp.NexusLogistics";
         public const string NAME = "NexusLogistics";
-        public const string VERSION = "1.0.1"; // Version bump for fix
+        public const string VERSION = "1.0.2"; 
         
         private const int SAVE_VERSION = 2; // Incremented save version for the new 'limit' field
 
@@ -373,6 +373,12 @@ namespace NexusLogistics
             {
                 GUI.DrawTexture(storageWindowRect, windowTexture); // Reuse existing texture
                 storageWindowRect = GUI.Window(1, storageWindowRect, StorageWindowFunction, "Remote Storage Contents");
+            }
+
+            // Prevent click-through
+            if ((showGUI && windowRect.Contains(Event.current.mousePosition)) || (showStorageGUI && storageWindowRect.Contains(Event.current.mousePosition)))
+            {
+                Input.ResetInputAxes();
             }
         }
 
