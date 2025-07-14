@@ -1,7 +1,5 @@
 # NexusLogistics for Dyson Sphere Program
 
-**Version:** 1.2.0
-
 An unofficial update and feature-rich continuation of the original **PackageLogistic** mod by `qlvlp-com`. NexusLogistics provides a centralized, "magic" logistics network that dramatically simplifies resource management across your entire star cluster, allowing you to focus on designing and expanding your factory.
 
 ---
