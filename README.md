@@ -102,6 +102,10 @@ If you wish to build the mod yourself:
 
 ## Changelog
 
+### Version 1.1.1
+* **UI Polish:** The main options window has been made wider to prevent cramping, and a vertical scrollbar has been added to automatically handle content that overflows the window height. This ensures all options, including the fuel selection grid, are fully visible and accessible.
+* **UI Fix:** The "Intermediates" category tab in the remote storage window has been shortened to "Intermeds" to correct a layout issue where the text would not fit.
+
 ### Version 1.1.0
 * **Feature:** Added granular control over the Automatic Proliferation system. Players can now select a specific tier of proliferator to be used (MK.I, MK.II, or MK.III), or select "All" to maintain the original behaviour. This can be configured from a new toolbar in the main options window.
 
