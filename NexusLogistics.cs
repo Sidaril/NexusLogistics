@@ -19,7 +19,7 @@ namespace NexusLogistics
     {
         public const string GUID = "com.Sidaril.dsp.NexusLogistics";
         public const string NAME = "NexusLogistics";
-        public const string VERSION = "1.1.0";
+        public const string VERSION = "1.1.1";
 
         private const int SAVE_VERSION = 2; // Incremented save version for the new 'limit' field
 
@@ -93,9 +93,10 @@ namespace NexusLogistics
         private const float hydrogenThreshold = 0.6f;
         private bool showGUI = false;
         private bool showStorageGUI = false; // Controls visibility of the new storage GUI
-        private Rect windowRect = new Rect(700, 250, 500, 400);
-        private Rect storageWindowRect = new Rect(100, 250, 500, 500); // MODIFIED: New window position and size
+        private Rect windowRect = new Rect(700, 250, 600, 500); // MODIFIED: Increased window width for more space
+        private Rect storageWindowRect = new Rect(100, 250, 550, 500);
         private Vector2 storageScrollPosition; // For the scroll view
+        private Vector2 mainPanelScrollPosition; 
         private readonly Texture2D windowTexture = new Texture2D(10, 10);
         private int selectedPanel = 0;
         private readonly Dictionary<int, string> fuelOptions = new Dictionary<int, string>();
@@ -447,7 +448,7 @@ namespace NexusLogistics
         // MODIFIED: Function to display and manage the storage window with limits
         void StorageWindowFunction(int windowID)
         {
-            string[] categories = { "Raw", "Intermediates", "Buildings", "Combat", "Science" };
+            string[] categories = { "Raw", "Intermeds", "Buildings", "Combat", "Science" };
             selectedStorageCategory = (StorageCategory)GUILayout.Toolbar((int)selectedStorageCategory, categories);
 
             GUILayout.BeginVertical();
@@ -520,6 +521,8 @@ namespace NexusLogistics
 
         void MainPanel()
         {
+            // MODIFIED: ScrollView to only scroll vertically
+            mainPanelScrollPosition = GUILayout.BeginScrollView(mainPanelScrollPosition, false, true);
             GUILayout.BeginVertical();
             GUILayout.Space(10);
             GUILayout.Label("Enable or stop MOD operation");
@@ -552,12 +555,13 @@ namespace NexusLogistics
             autoReplenishTPPFuel.Value = GUILayout.Toggle(autoReplenishTPPFuel.Value, "Automatically replenish fuel for thermal power plants");
             if (autoReplenishTPPFuel.Value)
             {
-                selectedFuelIndex = GUILayout.SelectionGrid(selectedFuelIndex, fuelOptions.Values.ToArray(), 4, GUI.skin.toggle);
+                selectedFuelIndex = GUILayout.SelectionGrid(selectedFuelIndex, fuelOptions.Values.ToArray(), 3, GUI.skin.toggle);
                 fuelId.Value = fuelOptions.Keys.ToArray()[selectedFuelIndex];
             }
 
             GUILayout.Space(5);
             GUILayout.EndVertical();
+            GUILayout.EndScrollView();
         }
 
         void ItemPanel()
