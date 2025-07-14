@@ -102,6 +102,16 @@ If you wish to build the mod yourself:
 
 ## Changelog
 
+### Version 1.3.0 - The Proliferation Clarity Update
+
+This update focuses entirely on improving the user interface and providing a much clearer, more intuitive view of your proliferated items in the remote storage network.
+
+* **UI Overhaul:** The proliferation display in the remote storage window (`LeftControl + K`) has been completely redesigned. The raw, confusing "Inc Points" value has been removed.
+* **New Proliferation Tiers:** Items now show a clear, color-coded proliferation status: `None`, `Mixed`, `Mk.I`, `Mk.II`, or `Mk.III`.
+* **Tier Progress Percentage:** To provide more detail, a percentage now appears next to the tier, showing how close the entire stack is to reaching the next level of proliferation (e.g., `Mk.I (75%)`).
+* **Accurate Color-Coding:** The colors for the proliferation tiers have been adjusted to match their in-game visuals (Mk.I is Orange/Gold, Mk.II is Green, Mk.III is Blue).
+* **Layout Improvements:** The remote storage window has been widened to prevent text from wrapping and to ensure the new proliferation status is displayed correctly.
+
 ### Version 1.2.0 - The Architecture Update
 
 This is a massive under-the-hood update focused on long-term stability, performance, and maintainability. While there are few new user-facing features, the entire mod has been rewritten from the ground up to provide a much more robust experience.

@@ -15,7 +15,7 @@ namespace NexusLogistics
         private bool _showMainWindow;
         private bool _showStorageWindow;
         private Rect _mainWindowRect = new Rect(700, 250, 600, 500);
-        private Rect _storageWindowRect = new Rect(100, 250, 550, 500);
+        private Rect _storageWindowRect = new Rect(100, 250, 600, 500);
         private Vector2 _mainScrollPos;
         private Vector2 _storageScrollPos;
         
@@ -153,7 +153,7 @@ namespace NexusLogistics
             GUILayout.BeginHorizontal();
             GUILayout.Label("Item Name", GUILayout.Width(150));
             GUILayout.Label("Count", GUILayout.Width(100));
-            GUILayout.Label("Inc Points", GUILayout.Width(80));
+            GUILayout.Label("Proliferation", GUILayout.Width(100));
             GUILayout.Label("Limit", GUILayout.Width(100));
             GUILayout.EndHorizontal();
 
@@ -173,10 +173,59 @@ namespace NexusLogistics
             ItemProto itemProto = LDB.items.Select(itemId);
             if (itemProto == null) return;
 
+            // --- MODIFICATION: Proliferation Display Logic with Percentage ---
+            float avgInc = 0;
+            if (item.Count > 0)
+            {
+                avgInc = (float)item.Inc / item.Count;
+            }
+            string proliferationText;
+            Color proliferationColor;
+
+            // Determine text, color, and percentage based on average proliferation level
+            // avgInc represents sprays per item: Mk1=1, Mk2=2, Mk3=4
+            if (avgInc >= 3.999f) // Maxed at Mk.III
+            {
+                proliferationText = "Mk.III (Max)";
+                proliferationColor = new Color(0.5f, 0.8f, 1f); // Blue
+            }
+            else if (avgInc >= 2.0f) // Tier is Mk.II, progressing to Mk.III
+            {
+                // Progress from Mk.II (2 sprays) to Mk.III (4 sprays)
+                int percentage = (int)(((avgInc - 2.0f) / 2.0f) * 100);
+                proliferationText = $"Mk.II ({percentage}%)";
+                proliferationColor = new Color(0.4f, 0.9f, 0.4f); // Green
+            }
+            else if (avgInc >= 1.0f) // Tier is Mk.I, progressing to Mk.II
+            {
+                // Progress from Mk.I (1 spray) to Mk.II (2 sprays)
+                int percentage = (int)((avgInc - 1.0f) * 100);
+                proliferationText = $"Mk.I ({percentage}%)";
+                proliferationColor = new Color(1f, 0.8f, 0.3f); // Orange/Gold
+            }
+            else if (avgInc > 0) // Tier is None/Mixed, progressing to Mk.I
+            {
+                // Progress from None (0 sprays) to Mk.I (1 spray)
+                int percentage = (int)(avgInc * 100);
+                proliferationText = $"Mixed ({percentage}%)";
+                proliferationColor = Color.yellow;
+            }
+            else // None
+            {
+                proliferationText = "None";
+                proliferationColor = Color.gray;
+            }
+            // --- END: Proliferation Display Logic ---
+
             GUILayout.BeginHorizontal();
             GUILayout.Label(itemProto.name, GUILayout.Width(150));
             GUILayout.Label(item.Count.ToString("N0"), GUILayout.Width(100));
-            GUILayout.Label(item.Inc.ToString("N0"), GUILayout.Width(80));
+
+            var originalColor = GUI.contentColor;
+            GUI.contentColor = proliferationColor;
+            // Display the status, with a tooltip showing the precise average spray count
+            GUILayout.Label(new GUIContent(proliferationText, $"Avg. Sprays: {avgInc:F2}"), GUILayout.Width(100));
+            GUI.contentColor = originalColor;
 
             string currentInput = _limitInputStrings[itemId];
             string newInput = GUILayout.TextField(currentInput, GUILayout.Width(100));

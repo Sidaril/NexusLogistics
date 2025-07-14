@@ -219,7 +219,7 @@ namespace NexusLogistics
     {
         public const string GUID = "com.Sidaril.dsp.NexusLogistics";
         public const string NAME = "NexusLogistics";
-        public const string VERSION = "1.2.0"; 
+        public const string VERSION = "1.3.0"; 
 
         #region Config Entries
         public static ConfigEntry<bool> EnableMod { get; private set; }
