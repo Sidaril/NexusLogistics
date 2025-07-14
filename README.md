@@ -102,6 +102,9 @@ If you wish to build the mod yourself:
 
 ## Changelog
 
+### Version 1.1.0
+* **Feature:** Added granular control over the Automatic Proliferation system. Players can now select a specific tier of proliferator to be used (MK.I, MK.II, or MK.III), or select "All" to maintain the original behaviour. This can be configured from a new toolbar in the main options window.
+
 ### Version 1.0.2
 * **Bug Fix:** Fixed an issue where clicking on the mod's UI windows would also click on buildings or objects in the game world behind them.
 

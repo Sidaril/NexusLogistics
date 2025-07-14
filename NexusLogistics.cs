@@ -19,9 +19,18 @@ namespace NexusLogistics
     {
         public const string GUID = "com.Sidaril.dsp.NexusLogistics";
         public const string NAME = "NexusLogistics";
-        public const string VERSION = "1.0.2"; 
-        
+        public const string VERSION = "1.1.0";
+
         private const int SAVE_VERSION = 2; // Incremented save version for the new 'limit' field
+
+        // ADD: Enum for Proliferator Selection
+        private enum ProliferatorSelection
+        {
+            All,
+            Mk1,
+            Mk2,
+            Mk3
+        }
 
         // ADD: New class for items in our remote storage
         private class RemoteStorageItem
@@ -59,6 +68,7 @@ namespace NexusLogistics
 
         private ConfigEntry<Boolean> autoSpray;
         private ConfigEntry<Boolean> costProliferator;
+        private ConfigEntry<ProliferatorSelection> proliferatorSelection; // ADD: New config entry
         private ConfigEntry<Boolean> infVeins;
         private ConfigEntry<Boolean> infItems;
         private ConfigEntry<Boolean> infSand;
@@ -69,7 +79,7 @@ namespace NexusLogistics
         private ConfigEntry<Boolean> enableMod;
         private ConfigEntry<Boolean> autoReplenishPackage;
         private ConfigEntry<Boolean> autoReplenishTPPFuel;
-        
+
         private readonly List<(int, int)> proliferators = new List<(int, int)>();
         private readonly Dictionary<int, int> incPool = new Dictionary<int, int>()
         {
@@ -91,7 +101,7 @@ namespace NexusLogistics
         private readonly Dictionary<int, string> fuelOptions = new Dictionary<int, string>();
         private ConfigEntry<int> fuelId;
         private int selectedFuelIndex;
-        
+
         // ADD: For categorized storage GUI
         private enum StorageCategory
         {
@@ -111,7 +121,7 @@ namespace NexusLogistics
         private ConfigEntry<Boolean> infFleet;
         private ConfigEntry<Boolean> infAmmo;
         Dictionary<EAmmoType, List<int>> ammos = new Dictionary<EAmmoType, List<int>>();
-        
+
         private List<KeyValuePair<int, RemoteStorageItem>> storageItemsForGUI = new List<KeyValuePair<int, RemoteStorageItem>>();
 
         #region IModCanSave Implementation
@@ -138,7 +148,7 @@ namespace NexusLogistics
                 // Don't try to load a newer save version
                 return;
             }
-            
+
             lock (remoteStorageLock)
             {
                 remoteStorage.Clear();
@@ -173,6 +183,7 @@ namespace NexusLogistics
             autoReplenishPackage = Config.Bind<Boolean>("Configuration", "autoReplenishPackage", true, "Automatically replenish items with filtering enabled in the backpack (middle-click on the slot to enable filtering)");
             autoSpray = Config.Bind<Boolean>("Configuration", "AutoSpray", true, "Automatic Spraying. Automatically sprays other items within the logistics backpack and interstellar logistics stations");
             costProliferator = Config.Bind<Boolean>("Configuration", "CostProliferator", true, "Consume Proliferator. Consumes proliferators from the backpack or interstellar logistics station during automatic spraying");
+            proliferatorSelection = Config.Bind<ProliferatorSelection>("Configuration", "ProliferatorSelection", ProliferatorSelection.All, "Which Proliferator tier to use for automatic spraying."); // ADD: Bind new config
             infItems = Config.Bind<Boolean>("Configuration", "InfItems", false, "Infinite Items. All items in the logistics backpack and interstellar logistics stations have infinite quantity (cannot obtain achievements)");
             infVeins = Config.Bind<Boolean>("Configuration", "InfVeins", false, "Infinite Minerals. All minerals in the logistics backpack and interstellar logistics stations have infinite quantity");
             infBuildings = Config.Bind<Boolean>("Configuration", "InfBuildings", false, "Infinite Buildings. All buildings in the logistics backpack and interstellar logistics stations have infinite quantity");
@@ -237,9 +248,9 @@ namespace NexusLogistics
 
                                 Traverse.Create(GameMain.mainPlayer).Property("sandCount").SetValue(1000000000);
                             }
-                            
+
                             CheckTech();
-                            
+
                             taskState["ProcessSpraying"] = false;
                             ThreadPool.QueueUserWorkItem(ProcessSpraying, taskState);
 
@@ -441,7 +452,7 @@ namespace NexusLogistics
 
             GUILayout.BeginVertical();
             GUILayout.Space(5);
-            
+
             GUILayout.BeginHorizontal();
             GUILayout.Label("Item Name", GUILayout.Width(150));
             GUILayout.Label("Count", GUILayout.Width(100));
@@ -457,7 +468,7 @@ namespace NexusLogistics
                 {
                     int itemId = pair.Key;
                     RemoteStorageItem item = pair.Value;
-                    
+
                     ItemProto itemProto = LDB.items.Select(itemId);
                     string itemName = itemProto.name;
 
@@ -484,9 +495,9 @@ namespace NexusLogistics
                         if (int.TryParse(newInput, out int newLimit) && newLimit >= 0)
                         {
                             // This lock is still necessary for thread-safe modification
-                            lock(remoteStorageLock)
+                            lock (remoteStorageLock)
                             {
-                                if(remoteStorage.ContainsKey(itemId))
+                                if (remoteStorage.ContainsKey(itemId))
                                 {
                                     remoteStorage[itemId].limit = newLimit;
                                 }
@@ -496,11 +507,11 @@ namespace NexusLogistics
                     GUILayout.EndHorizontal();
                 }
             }
-            catch(Exception e)
+            catch (Exception e)
             {
-                 GUILayout.Label("Error displaying storage: " + e.Message);
+                GUILayout.Label("Error displaying storage: " + e.Message);
             }
-            
+
             GUILayout.EndScrollView();
             GUILayout.EndVertical();
             GUI.DragWindow();
@@ -524,6 +535,15 @@ namespace NexusLogistics
             autoSpray.Value = GUILayout.Toggle(autoSpray.Value, "Auto Spray");
             costProliferator.Value = GUILayout.Toggle(costProliferator.Value, "Consume Proliferator");
             GUILayout.EndHorizontal();
+            
+            // ADD: Proliferator tier selection GUI
+            if (autoSpray.Value)
+            {
+                GUILayout.BeginHorizontal();
+                GUILayout.Label("Proliferator Tier:", GUILayout.Width(120));
+                proliferatorSelection.Value = (ProliferatorSelection)GUILayout.Toolbar((int)proliferatorSelection.Value, new string[] { "All", "MK.I", "MK.II", "MK.III" });
+                GUILayout.EndHorizontal();
+            }
 
             GUILayout.Space(15);
             useStorege.Value = GUILayout.Toggle(useStorege.Value, "Recover items from storage boxes and liquid tanks");
@@ -575,7 +595,8 @@ namespace NexusLogistics
             infFleet.Value = GUILayout.Toggle(infFleet.Value, "Infinite Fleet");
 
             GUILayout.Space(15);
-            if(GUILayout.Button(new GUIContent("Clear Battlefield Analysis Base", "Items set not to drop will be discarded"), GUILayout.Width(150))) {
+            if (GUILayout.Button(new GUIContent("Clear Battlefield Analysis Base", "Items set not to drop will be discarded"), GUILayout.Width(150)))
+            {
                 ClearBattleBase();
             }
             GUILayout.Space(5);
@@ -662,18 +683,40 @@ namespace NexusLogistics
                 GameMain.history.remoteStationExtraStorage = 15000;
             }
         }
-        
+
+        // MODIFIED: This method now respects the proliferator selection
         void ProcessSpraying(object state)
         {
             try
             {
                 if (!autoSpray.Value) return;
 
-                lock(remoteStorageLock)
+                lock (remoteStorageLock)
                 {
+                    // Determine which proliferators to use based on the selection
+                    var activeProliferators = new List<(int, int)>();
+                    switch (proliferatorSelection.Value)
+                    {
+                        case ProliferatorSelection.Mk1:
+                            activeProliferators.Add((1141, 1)); // Proliferator MK.I
+                            break;
+                        case ProliferatorSelection.Mk2:
+                            activeProliferators.Add((1142, 2)); // Proliferator MK.II
+                            break;
+                        case ProliferatorSelection.Mk3:
+                            activeProliferators.Add((1143, 4)); // Proliferator MK.III
+                            break;
+                        case ProliferatorSelection.All:
+                        default:
+                            activeProliferators.AddRange(proliferators); // Use all of them
+                            break;
+                    }
+
+
                     if (costProliferator.Value)
                     {
-                        foreach (var proliferator in proliferators)
+                        // Only process the selected proliferators
+                        foreach (var proliferator in activeProliferators)
                         {
                             int proliferatorId = proliferator.Item1;
                             int factor = 0;
@@ -693,13 +736,15 @@ namespace NexusLogistics
                         }
                     }
 
-                    foreach(var pair in remoteStorage)
+                    foreach (var pair in remoteStorage)
                     {
                         int itemId = pair.Key;
                         var storageItem = pair.Value;
                         if (itemId <= 0 || storageItem.count <= 0) continue;
 
-                        if (itemId == 1141 || itemId == 1142 || itemId == 1143) {
+                        // Skip proliferator items themselves
+                        if (itemId == 1141 || itemId == 1142 || itemId == 1143)
+                        {
                             storageItem.inc = storageItem.count * 4;
                             continue;
                         }
@@ -709,19 +754,22 @@ namespace NexusLogistics
 
                         if (!costProliferator.Value)
                         {
-                            if (storageItem.inc < storageItem.count * 4) storageItem.inc = storageItem.count * 4;
+                            // If not costing proliferator, use the highest available spray level from the selection
+                            int maxSprayLevel = activeProliferators.Count > 0 ? activeProliferators.Max(p => p.Item2) : 4;
+                            if (storageItem.inc < storageItem.count * maxSprayLevel) storageItem.inc = storageItem.count * maxSprayLevel;
                             continue;
                         }
 
-                        foreach (var proliferator in proliferators)
+                        // Iterate through the selected proliferators to apply points
+                        foreach (var proliferator in activeProliferators)
                         {
                             int sprayLevel = proliferator.Item2;
                             int proliferatorId = proliferator.Item1;
                             int expectedInc = storageItem.count * sprayLevel - storageItem.inc;
-                            if (expectedInc <= 0) break;
+                            if (expectedInc <= 0) break; // Already has enough inc for this level
 
                             int pointsToTake = expectedInc;
-                            int availablePoints = incPool[proliferatorId];
+                            int availablePoints = incPool.ContainsKey(proliferatorId) ? incPool[proliferatorId] : 0;
                             int actualPoints = Math.Min(pointsToTake, availablePoints);
 
                             if (actualPoints > 0)
@@ -800,7 +848,7 @@ namespace NexusLogistics
                 return false;
             }
         }
-        
+
         // Updated function to handle both PLS and ILS
         void ProcessTransport(object state)
         {
@@ -990,8 +1038,10 @@ namespace NexusLogistics
 
                     foreach (StationComponent sc in pf.transport.stationPool)
                     {
-                        if (sc == null || sc.id <= 0) {
-                            continue; }
+                        if (sc == null || sc.id <= 0)
+                        {
+                            continue;
+                        }
                         if (sc.isStellar && sc.isCollector)
                         {
                             for (int i = sc.storage.Length - 1; i >= 0; i--)
@@ -1029,11 +1079,11 @@ namespace NexusLogistics
             {
                 return fuelId.Value;
             }
-            
-            if(TakeItem(1114, 1)[0] > 0) return 1114;
-            if(TakeItem(1120, 1)[0] > 0) return 1120;
-            if(TakeItem(1006, 1)[0] > 0) return 1006;
-            
+
+            if (TakeItem(1114, 1)[0] > 0) return 1114;
+            if (TakeItem(1120, 1)[0] > 0) return 1120;
+            if (TakeItem(1006, 1)[0] > 0) return 1006;
+
             return 0;
         }
 
@@ -1087,7 +1137,7 @@ namespace NexusLogistics
                                     fuelId = 1803;
                                 break;
                         }
-                        if(fuelId == 0)
+                        if (fuelId == 0)
                         {
                             continue;
                         }
@@ -1451,7 +1501,7 @@ namespace NexusLogistics
                 taskState["ProcessPackage"] = true;
             }
         }
-        
+
         // MODIFIED: This function now respects item limits
         int[] AddItem(int itemId, int count, int inc, bool assembler = true)
         {
@@ -1469,7 +1519,7 @@ namespace NexusLogistics
                 }
 
                 var storageItem = remoteStorage[itemId];
-                
+
                 // Calculate how much space is available
                 int spaceAvailable = storageItem.limit - storageItem.count;
                 if (spaceAvailable <= 0)
@@ -1489,7 +1539,7 @@ namespace NexusLogistics
                 return new int[] { amountToAdd, incToAdd };
             }
         }
-        
+
         int[] TakeItem(int itemId, int count)
         {
             if (itemId <= 0 || count <= 0)
@@ -1531,7 +1581,7 @@ namespace NexusLogistics
             }
             return new int[] { 0, 0 };
         }
-       
+
         int SplitInc(int count, int inc, int expectCount)
         {
             if (count <= 0 || inc <= 0) return 0;
