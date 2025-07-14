@@ -1,6 +1,6 @@
 # NexusLogistics for Dyson Sphere Program
 
-**Version:** 1.1.1
+**Version:** 1.2.0
 
 An unofficial update and feature-rich continuation of the original **PackageLogistic** mod by `qlvlp-com`. NexusLogistics provides a centralized, "magic" logistics network that dramatically simplifies resource management across your entire star cluster, allowing you to focus on designing and expanding your factory.
 
@@ -101,6 +101,15 @@ If you wish to build the mod yourself:
 4.  Build the solution. The `NexusLogistics.dll` will be generated in the `bin/Debug` or `bin/Release` folder.
 
 ## Changelog
+
+### Version 1.2.0 - The Architecture Update
+
+This is a massive under-the-hood update focused on long-term stability, performance, and maintainability. While there are few new user-facing features, the entire mod has been rewritten from the ground up to provide a much more robust experience.
+
+* **Major Code Refactor:** The entire codebase has been professionally refactored. The single, monolithic script has been split into three distinct, organized classes (`NexusLogistics`, `NexusGui`, `NexusProcessor`), making future updates and bug fixes significantly easier and safer to implement.
+* **Improved Threading Model:** The mod no longer uses a complex thread pool. It now uses a single, dedicated background thread for all its logic. This eliminates a whole class of potential race conditions and improves overall stability and performance.
+* **Critical Crash Fix:** Fixed a major crash-to-desktop that could occur when opening the player inventory or other UI elements. This was caused by the mod trying to modify UI components from a background thread. All UI-related code is now handled safely on the main game thread.
+* **UI Consistency Fix:** The UI windows no longer change color when you click on them. They now maintain their consistent dark theme whether they are in focus or not.
 
 ### Version 1.1.1
 * **UI Polish:** The main options window has been made wider to prevent cramping, and a vertical scrollbar has been added to automatically handle content that overflows the window height. This ensures all options, including the fuel selection grid, are fully visible and accessible.
