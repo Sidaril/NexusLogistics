@@ -1,6 +1,6 @@
 # NexusLogistics for Dyson Sphere Program
 
-**Version:** 1.1.1
+**Version:** 1.2.0
 
 An unofficial update and feature-rich continuation of the original **PackageLogistic** mod by `qlvlp-com`. NexusLogistics provides a centralized, "magic" logistics network that dramatically simplifies resource management across your entire star cluster, allowing you to focus on designing and expanding your factory.
 
@@ -101,6 +101,13 @@ If you wish to build the mod yourself:
 4.  Build the solution. The `NexusLogistics.dll` will be generated in the `bin/Debug` or `bin/Release` folder.
 
 ## Changelog
+
+### Version 1.2.0
+* **UI Overhaul:** The Remote Storage window has been updated to provide a more intuitive and visually informative display of item proliferation.
+    * The "Inc Points" column has been replaced with a "Proliferation" column.
+    * The proliferation level of an item is now displayed with color-coded text that matches the in-game proliferator colors (Orange for Mk1, Green for Mk2, Blue for Mk3).
+    * For items that are not fully proliferated to the next tier, a percentage now indicates their progress, e.g., "Mk 1 (50%)".
+* **Code Refactor:** The underlying logic for calculating and displaying proliferation status has been refactored to be more robust, accurate, and easier to maintain.
 
 ### Version 1.1.1
 * **UI Polish:** The main options window has been made wider to prevent cramping, and a vertical scrollbar has been added to automatically handle content that overflows the window height. This ensures all options, including the fuel selection grid, are fully visible and accessible.
