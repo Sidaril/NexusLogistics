@@ -1,6 +1,6 @@
 # NexusLogistics for Dyson Sphere Program
 
-**Version:** 1.2.0
+**Version:** 1.3.0
 
 An unofficial update and feature-rich continuation of the original **PackageLogistic** mod by `qlvlp-com`. NexusLogistics provides a centralized, "magic" logistics network that dramatically simplifies resource management across your entire star cluster, allowing you to focus on designing and expanding your factory.
 
@@ -101,6 +101,12 @@ If you wish to build the mod yourself:
 4.  Build the solution. The `NexusLogistics.dll` will be generated in the `bin/Debug` or `bin/Release` folder.
 
 ## Changelog
+
+### Version 1.3.0
+* **Major Refactor:** The entire internal codebase has been overhauled for improved stability, readability, and future maintainability.
+* **Code Quality:** Replaced hardcoded "magic numbers" with descriptive constants, making the code easier to understand and modify.
+* **Modernized Concurrency:** The core processing loop has been updated to use the modern `Task` Parallel Library, improving the stability and efficiency of the mod's multithreading.
+* **Bug Fixes:** Corrected several internal bugs that could cause build errors and issues with item removal from storage containers.
 
 ### Version 1.2.0
 * **UI Overhaul:** The Remote Storage window has been updated to provide a more intuitive and visually informative display of item proliferation.
