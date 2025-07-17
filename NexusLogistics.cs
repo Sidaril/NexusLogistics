@@ -93,7 +93,7 @@ namespace NexusLogistics
         #region Constants and Fields
         public const string GUID = "com.Sidaril.dsp.NexusLogistics";
         public const string NAME = "NexusLogistics";
-        public const string VERSION = "1.3.0";
+        public const string VERSION = "1.4.0";
 
         private const int SAVE_VERSION = 2;
 
@@ -105,7 +105,7 @@ namespace NexusLogistics
         private readonly object remoteStorageLock = new object();
 
         // Configuration Entries
-        private ConfigEntry<bool> autoSpray, costProliferator, infVeins, infItems, infSand, infBuildings, useStorege;
+        private ConfigEntry<bool> autoSpray, costProliferator, infVeins, infItems, infSand, infBuildings, useStorege, autoCleanInventory;
         private ConfigEntry<bool> enableMod, autoReplenishPackage, autoReplenishTPPFuel, infFleet, infAmmo;
         private ConfigEntry<KeyboardShortcut> hotKey, storageHotKey;
         private ConfigEntry<ProliferatorSelection> proliferatorSelection;
@@ -236,6 +236,7 @@ namespace NexusLogistics
             storageHotKey = Config.Bind("Window Shortcut Key", "Storage_Key", new KeyboardShortcut(KeyCode.K, KeyCode.LeftControl));
             enableMod = Config.Bind("Configuration", "EnableMod", true, "Enable MOD");
             autoReplenishPackage = Config.Bind("Configuration", "autoReplenishPackage", true, "Automatically replenish items with filtering enabled in the backpack (middle-click on the slot to enable filtering)");
+            autoCleanInventory = Config.Bind("Configuration", "AutoCleanInventory", true, "Automatically move items from main inventory to matching logistic slots.");
             autoSpray = Config.Bind("Configuration", "AutoSpray", true, "Automatic Spraying. Automatically sprays other items within the logistics backpack and interstellar logistics stations");
             costProliferator = Config.Bind("Configuration", "CostProliferator", true, "Consume Proliferator. Consumes proliferators from the backpack or interstellar logistics station during automatic spraying");
             proliferatorSelection = Config.Bind("Configuration", "ProliferatorSelection", ProliferatorSelection.All, "Which Proliferator tier to use for automatic spraying.");
@@ -337,6 +338,7 @@ namespace NexusLogistics
 
                         if (useStorege.Value) tasks.Add(ProcessStorage());
                         if (autoReplenishPackage.Value) tasks.Add(ProcessPackage());
+                        if (autoCleanInventory.Value) tasks.Add(ProcessInventoryToLogistics());
 
                         // Wait for all tasks to complete before starting the next tick.
                         Task.WhenAll(tasks).Wait();
@@ -459,6 +461,7 @@ namespace NexusLogistics
             GUILayout.Space(10);
             enableMod.Value = GUILayout.Toggle(enableMod.Value, "Enable MOD");
             autoReplenishPackage.Value = GUILayout.Toggle(autoReplenishPackage.Value, "Auto Replenish Filtered Items");
+            autoCleanInventory.Value = GUILayout.Toggle(autoCleanInventory.Value, "Auto Clean Inventory to Logistic Slots");
 
             GUILayout.Space(15);
             GUILayout.BeginHorizontal();
@@ -621,10 +624,12 @@ namespace NexusLogistics
                     else if (grid.recycleCount < grid.count)
                     {
                         int supplyCount = grid.count - grid.recycleCount;
-                        int[] result = AddItem(grid.itemId, supplyCount, 0, false);
+                        int supplyInc = SplitInc(grid.count, grid.inc, supplyCount);
+                        int[] result = AddItem(grid.itemId, supplyCount, supplyInc, true);
                         if (result[0] > 0)
                         {
                             deliveryPackage.grids[i].count -= result[0];
+                            deliveryPackage.grids[i].inc -= result[1];
                         }
                     }
                 }
@@ -653,7 +658,7 @@ namespace NexusLogistics
 
                             if (logic == ELogisticStorage.Supply && ss.count > 0)
                             {
-                                int[] result = AddItem(ss.itemId, ss.count, ss.inc, false);
+                                int[] result = AddItem(ss.itemId, ss.count, ss.inc);
                                 sc.storage[i].count -= result[0];
                                 sc.storage[i].inc -= result[1];
                             }
@@ -688,7 +693,7 @@ namespace NexusLogistics
                         {
                             StorageComponent.GRID grid = sc.grids[i];
                             if (grid.itemId <= 0 || grid.count <= 0) continue;
-                            int[] result = AddItem(grid.itemId, grid.count, grid.inc, false);
+                            int[] result = AddItem(grid.itemId, grid.count, grid.inc);
                             if (result[0] > 0)
                             {
                                 sc.grids[i].count -= result[0];
@@ -707,7 +712,7 @@ namespace NexusLogistics
                     {
                         TankComponent tc = pf.factoryStorage.tankPool[i];
                         if (tc.id == 0 || tc.fluidId == 0 || tc.fluidCount == 0) continue;
-                        int[] result = AddItem(tc.fluidId, tc.fluidCount, tc.fluidInc, false);
+                        int[] result = AddItem(tc.fluidId, tc.fluidCount, tc.fluidInc);
                         pf.factoryStorage.tankPool[i].fluidCount -= result[0];
                         pf.factoryStorage.tankPool[i].fluidInc -= result[1];
                         if (pf.factoryStorage.tankPool[i].fluidCount <= 0)
@@ -764,7 +769,7 @@ namespace NexusLogistics
                     {
                         MinerComponent mc = pf.factorySystem.minerPool[i];
                         if (mc.id <= 0 || mc.productId <= 0 || mc.productCount <= 0) continue;
-                        int[] result = AddItem(mc.productId, mc.productCount, 0, false);
+                        int[] result = AddItem(mc.productId, mc.productCount, 0);
                         pf.factorySystem.minerPool[i].productCount -= result[0];
                     }
 
@@ -778,7 +783,7 @@ namespace NexusLogistics
                             {
                                 StationStore ss = sc.storage[i];
                                 if (ss.itemId <= 0 || ss.count <= 0 || ss.remoteLogic != ELogisticStorage.Supply) continue;
-                                int[] result = AddItem(ss.itemId, ss.count, 0, false);
+                                int[] result = AddItem(ss.itemId, ss.count, 0);
                                 sc.storage[i].count -= result[0];
                             }
                         }
@@ -786,7 +791,7 @@ namespace NexusLogistics
                         {
                             StationStore ss = sc.storage[0];
                             if (ss.itemId <= 0 || ss.count <= 0 || ss.localLogic != ELogisticStorage.Supply) continue;
-                            int[] result = AddItem(ss.itemId, ss.count, 0, false);
+                            int[] result = AddItem(ss.itemId, ss.count, 0);
                             sc.storage[0].count -= result[0];
                         }
                     }
@@ -1045,7 +1050,7 @@ namespace NexusLogistics
                         {
                             StorageComponent.GRID grid = sc.grids[gIndex];
                             if (grid.itemId <= 0 || grid.count <= 0) continue;
-                            int[] result = AddItem(grid.itemId, grid.count, grid.inc, false);
+                            int[] result = AddItem(grid.itemId, grid.count, grid.inc);
                             if (result[0] > 0)
                             {
                                 sc.grids[gIndex].count -= result[0];
@@ -1091,6 +1096,71 @@ namespace NexusLogistics
             }
             catch (Exception ex) { Logger.LogError(ex); }
         });
+        
+        /// <summary>
+        /// New task to automatically move items from the main inventory to matching logistic slots.
+        /// </summary>
+        Task ProcessInventoryToLogistics() => Task.Run(() =>
+        {
+            try
+            {
+                var player = GameMain.mainPlayer;
+                if (player == null) return;
+
+                var mainInventory = player.package;
+                var logisticsInventory = player.deliveryPackage;
+
+                if (!logisticsInventory.unlocked) return;
+
+                // Create a quick lookup for logistic slot items
+                var logisticSlotItems = new Dictionary<int, int>(); // Key: itemId, Value: grid index
+                for (int i = 0; i < logisticsInventory.gridLength; i++)
+                {
+                    if (logisticsInventory.grids[i].itemId > 0)
+                    {
+                        if (!logisticSlotItems.ContainsKey(logisticsInventory.grids[i].itemId))
+                        {
+                            logisticSlotItems.Add(logisticsInventory.grids[i].itemId, i);
+                        }
+                    }
+                }
+
+                bool changed = false;
+                // Iterate through main inventory
+                for (int i = 0; i < mainInventory.size; i++)
+                {
+                    var grid = mainInventory.grids[i];
+                    if (grid.itemId <= 0 || grid.count <= 0) continue;
+
+                    // Check if a logistic slot exists for this item
+                    if (logisticSlotItems.TryGetValue(grid.itemId, out int logisticSlotIndex))
+                    {
+                        // Found a matching logistic slot. Move the items.
+                        int amountToMove = grid.count;
+
+                        // Add item to the logistic slot
+                        logisticsInventory.grids[logisticSlotIndex].count += amountToMove;
+                        logisticsInventory.grids[logisticSlotIndex].inc += grid.inc;
+
+                        // Remove item from main inventory
+                        mainInventory.TakeItem(grid.itemId, amountToMove, out int inc);
+
+                        changed = true;
+                    }
+                }
+
+                if (changed)
+                {
+                    // Notify the game that the inventory has changed to update the UI
+                    mainInventory.NotifyStorageChange();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"Error in ProcessInventoryToLogistics: {ex}");
+            }
+        });
+
 
         #endregion
 
@@ -1099,8 +1169,9 @@ namespace NexusLogistics
         /// <summary>
         /// Adds an item to the central remote storage.
         /// </summary>
+        /// <param name="bypassLimit">If true, the storage item limit will be ignored. Used for player logistic slot recycling.</param>
         /// <returns>An array containing the count and inc of the item actually added.</returns>
-        int[] AddItem(int itemId, int count, int inc, bool assembler = true)
+        int[] AddItem(int itemId, int count, int inc, bool bypassLimit = false)
         {
             if (itemId <= 0 || count <= 0) return new int[] { 0, 0 };
 
@@ -1108,14 +1179,28 @@ namespace NexusLogistics
             {
                 if (!remoteStorage.ContainsKey(itemId))
                 {
-                    remoteStorage[itemId] = new RemoteStorageItem { count = 0, inc = 0, limit = 1000000 };
+                    ItemProto itemProto = LDB.items.Select(itemId);
+                    StorageCategory category = GetItemCategory(itemProto);
+                    int defaultLimit = 1000000;
+                    if (category == StorageCategory.BuildingsAndVehicles || category == StorageCategory.AmmunitionAndCombat)
+                    {
+                        defaultLimit = 1000;
+                    }
+                    remoteStorage[itemId] = new RemoteStorageItem { count = 0, inc = 0, limit = defaultLimit };
                 }
 
                 var storageItem = remoteStorage[itemId];
-                int spaceAvailable = storageItem.limit - storageItem.count;
-                if (spaceAvailable <= 0) return new int[] { 0, 0 };
+                int amountToAdd = count;
 
-                int amountToAdd = Math.Min(count, spaceAvailable);
+                if (!bypassLimit)
+                {
+                    int spaceAvailable = storageItem.limit - storageItem.count;
+                    if (spaceAvailable <= 0) return new int[] { 0, 0 };
+                    amountToAdd = Math.Min(count, spaceAvailable);
+                }
+                
+                if (amountToAdd <= 0) return new int[] { 0, 0 };
+
                 int incToAdd = SplitInc(count, inc, amountToAdd);
 
                 storageItem.count += amountToAdd;

@@ -1,6 +1,6 @@
 # NexusLogistics for Dyson Sphere Program
 
-**Version:** 1.3.0
+**Version:** 1.4.0
 
 An unofficial update and feature-rich continuation of the original **PackageLogistic** mod by `qlvlp-com`. NexusLogistics provides a centralized, "magic" logistics network that dramatically simplifies resource management across your entire star cluster, allowing you to focus on designing and expanding your factory.
 
@@ -101,6 +101,11 @@ If you wish to build the mod yourself:
 4.  Build the solution. The `NexusLogistics.dll` will be generated in the `bin/Debug` or `bin/Release` folder.
 
 ## Changelog
+
+### Version 1.4.0
+* **Feature:** Player inventory logistic slots will now bypass the global item limit when recycling items back into the network. This ensures you can always clear your logistic slots regardless of storage caps.
+* **Feature:** Added a new optional feature: "Auto Clean Inventory". When enabled, items in your main inventory that have a corresponding logistic slot will be automatically moved to that slot, helping to keep your bags clean.
+* **Tweak:** Changed the default storage limit for all items in the "Buildings" and "Combat" categories to 1,000. All other items will continue to default to 1,000,000.
 
 ### Version 1.3.0
 * **Major Refactor:** The entire internal codebase has been overhauled for improved stability, readability, and future maintainability.
