@@ -93,7 +93,7 @@ namespace NexusLogistics
         #region Constants and Fields
         public const string GUID = "com.Sidaril.dsp.NexusLogistics";
         public const string NAME = "NexusLogistics";
-        public const string VERSION = "1.4.0";
+        public const string VERSION = "1.5.0";
 
         private const int SAVE_VERSION = 2;
 
@@ -110,6 +110,7 @@ namespace NexusLogistics
         private ConfigEntry<KeyboardShortcut> hotKey, storageHotKey;
         private ConfigEntry<ProliferatorSelection> proliferatorSelection;
         private ConfigEntry<int> fuelId;
+        private ConfigEntry<float> factorySpeedMultiplier;
 
         // Proliferation and Item Data
         private readonly List<(int, int)> proliferators = new List<(int, int)>();
@@ -249,6 +250,7 @@ namespace NexusLogistics
             fuelId = Config.Bind("Configuration", "fuelId", 0, "Thermal Power Plant Fuel ID\n0: Auto-select...");
             infAmmo = Config.Bind("Configuration", "InfAmmo", false, "Infinite Ammo. Ammo in the logistics backpack and interstellar logistics stations have infinite quantity");
             infFleet = Config.Bind("Configuration", "infFleet", false, "Infinite Fleet. Drones and warships in the logistics backpack and interstellar logistics stations have infinite quantity");
+            factorySpeedMultiplier = Config.Bind("Configuration", "FactorySpeedMultiplier", 1f, "Factory speed multiplier. Increases production and power consumption.");
         }
 
         /// <summary>
@@ -366,13 +368,14 @@ namespace NexusLogistics
 
         void WindowFunction(int windowID)
         {
-            string[] panels = { "Main Options", "Items", "Combat" };
+            string[] panels = { "Main Options", "Items", "Combat", "Factory Boost" };
             selectedPanel = GUILayout.Toolbar(selectedPanel, panels);
             switch (selectedPanel)
             {
                 case 0: MainPanel(); break;
                 case 1: ItemPanel(); break;
                 case 2: FightPanel(); break;
+                case 3: FactoryBoostPanel(); break;
             }
             GUI.DragWindow();
         }
@@ -515,6 +518,15 @@ namespace NexusLogistics
             {
                 ClearBattleBaseBannedItems();
             }
+            GUILayout.EndVertical();
+        }
+
+        void FactoryBoostPanel()
+        {
+            GUILayout.BeginVertical(GUI.skin.box);
+            GUILayout.Label($"Factory Speed Multiplier: {factorySpeedMultiplier.Value:F2}x");
+            factorySpeedMultiplier.Value = GUILayout.HorizontalSlider(factorySpeedMultiplier.Value, 1f, 10f);
+            GUILayout.Label("Increases production speed and power consumption of specified buildings.");
             GUILayout.EndVertical();
         }
 
@@ -730,20 +742,22 @@ namespace NexusLogistics
         {
             try
             {
+                float multiplier = factorySpeedMultiplier.Value;
                 foreach (var pf in GameMain.data.factories)
                 {
                     if (pf == null) continue;
+                    pf.powerSystem.consumerPool[pf.factorySystem.assemblerPool[0].entityId].workEnergyPerTick *= (long)multiplier;
                     foreach (AssemblerComponent ac in pf.factorySystem.assemblerPool)
                     {
                         if (ac.id <= 0 || ac.recipeId <= 0) continue;
                         for (int i = 0; i < ac.products.Length; i++)
                         {
                             if (ac.produced[i] > 0)
-                                ac.produced[i] -= AddItem(ac.products[i], ac.produced[i], 0)[0];
+                                ac.produced[i] -= AddItem(ac.products[i], (int)(ac.produced[i] * multiplier), 0)[0];
                         }
                         for (int i = 0; i < ac.requires.Length; i++)
                         {
-                            int expectCount = Math.Max(ac.requireCounts[i] * 5 - ac.served[i], 0);
+                            int expectCount = Math.Max((int)(ac.requireCounts[i] * 5 * multiplier) - ac.served[i], 0);
                             if (expectCount > 0)
                             {
                                 int[] result = TakeItem(ac.requires[i], expectCount);
@@ -761,15 +775,16 @@ namespace NexusLogistics
         {
             try
             {
+                float multiplier = factorySpeedMultiplier.Value;
                 foreach (var pf in GameMain.data.factories)
                 {
                     if (pf == null) continue;
-
+                    pf.powerSystem.consumerPool[pf.factorySystem.minerPool[0].entityId].workEnergyPerTick *= (long)multiplier;
                     for (int i = 0; i < pf.factorySystem.minerPool.Length; i++)
                     {
                         MinerComponent mc = pf.factorySystem.minerPool[i];
                         if (mc.id <= 0 || mc.productId <= 0 || mc.productCount <= 0) continue;
-                        int[] result = AddItem(mc.productId, mc.productCount, 0);
+                        int[] result = AddItem(mc.productId, (int)(mc.productCount * multiplier), 0);
                         pf.factorySystem.minerPool[i].productCount -= result[0];
                     }
 
@@ -904,15 +919,17 @@ namespace NexusLogistics
         {
             try
             {
+                float multiplier = factorySpeedMultiplier.Value;
                 foreach (var pf in GameMain.data.factories)
                 {
                     if (pf == null) continue;
+                    pf.powerSystem.consumerPool[pf.factorySystem.siloPool[0].entityId].workEnergyPerTick *= (long)multiplier;
                     for (int i = 0; i < pf.factorySystem.siloPool.Length; i++)
                     {
                         SiloComponent sc = pf.factorySystem.siloPool[i];
                         if (sc.id > 0 && sc.bulletCount <= 3)
                         {
-                            int[] result = TakeItem(sc.bulletId, 10);
+                            int[] result = TakeItem(sc.bulletId, (int)(10 * multiplier));
                             pf.factorySystem.siloPool[i].bulletCount += result[0];
                             pf.factorySystem.siloPool[i].bulletInc += result[1];
                         }
@@ -926,15 +943,17 @@ namespace NexusLogistics
         {
             try
             {
+                float multiplier = factorySpeedMultiplier.Value;
                 foreach (var pf in GameMain.data.factories)
                 {
                     if (pf == null) continue;
+                    pf.powerSystem.consumerPool[pf.factorySystem.ejectorPool[0].entityId].workEnergyPerTick *= (long)multiplier;
                     for (int i = 0; i < pf.factorySystem.ejectorPool.Length; i++)
                     {
                         EjectorComponent ec = pf.factorySystem.ejectorPool[i];
                         if (ec.id > 0 && ec.bulletCount <= 5)
                         {
-                            int[] result = TakeItem(ec.bulletId, 15);
+                            int[] result = TakeItem(ec.bulletId, (int)(15 * multiplier));
                             pf.factorySystem.ejectorPool[i].bulletCount += result[0];
                             pf.factorySystem.ejectorPool[i].bulletInc += result[1];
                         }
@@ -948,9 +967,11 @@ namespace NexusLogistics
         {
             try
             {
+                float multiplier = factorySpeedMultiplier.Value;
                 foreach (var pf in GameMain.data.factories)
                 {
                     if (pf == null) continue;
+                    pf.powerSystem.consumerPool[pf.factorySystem.labPool[0].entityId].workEnergyPerTick *= (long)multiplier;
                     foreach (LabComponent lc in pf.factorySystem.labPool)
                     {
                         if (lc.id <= 0) continue;
@@ -960,12 +981,12 @@ namespace NexusLogistics
                             {
                                 if (lc.produced[i] > 0)
                                 {
-                                    lc.produced[i] -= AddItem(lc.products[i], lc.produced[i], 0)[0];
+                                    lc.produced[i] -= AddItem(lc.products[i], (int)(lc.produced[i] * multiplier), 0)[0];
                                 }
                             }
                             for (int i = 0; i < lc.requires.Length; i++)
                             {
-                                int expectCount = lc.requireCounts[i] * 3 - lc.served[i] - lc.incServed[i];
+                                int expectCount = (int)(lc.requireCounts[i] * 3 * multiplier) - lc.served[i] - lc.incServed[i];
                                 int[] result = TakeItem(lc.requires[i], expectCount);
                                 lc.served[i] += result[0];
                                 lc.incServed[i] += result[1];
@@ -976,7 +997,7 @@ namespace NexusLogistics
                             for (int i = 0; i < lc.matrixPoints.Length; i++)
                             {
                                 if (lc.matrixPoints[i] <= 0 || lc.matrixServed[i] >= lc.matrixPoints[i] * 3600) continue;
-                                int[] result = TakeItem(LabComponent.matrixIds[i], lc.matrixPoints[i]);
+                                int[] result = TakeItem(LabComponent.matrixIds[i], (int)(lc.matrixPoints[i] * multiplier));
                                 lc.matrixServed[i] += result[0] * 3600;
                                 lc.matrixIncServed[i] += result[1] * 3600;
                             }

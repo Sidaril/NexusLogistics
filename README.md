@@ -1,6 +1,6 @@
 # NexusLogistics for Dyson Sphere Program
 
-**Version:** 1.4.0
+**Version:** 1.5.0
 
 An unofficial update and feature-rich continuation of the original **PackageLogistic** mod by `qlvlp-com`. NexusLogistics provides a centralized, "magic" logistics network that dramatically simplifies resource management across your entire star cluster, allowing you to focus on designing and expanding your factory.
 
@@ -101,6 +101,10 @@ If you wish to build the mod yourself:
 4.  Build the solution. The `NexusLogistics.dll` will be generated in the `bin/Debug` or `bin/Release` folder.
 
 ## Changelog
+
+### Version 1.5.0
+* **Feature:** Added a "Factory Boost" tab to the main GUI, which allows players to increase the production speed of their factories. This feature also increases the power consumption of the affected buildings by the same multiplier.
+* **Affected Buildings:** The speed multiplier affects Smelters, Chemical Plants, Refineries, Assembling Machines, Particle Colliders, Matrix Labs, Ray Receivers, EM-Rail Ejectors, Vertical Launching Silos, and Mining machines.
 
 ### Version 1.4.0
 * **Feature:** Player inventory logistic slots will now bypass the global item limit when recycling items back into the network. This ensures you can always clear your logistic slots regardless of storage caps.
