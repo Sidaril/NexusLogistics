@@ -746,23 +746,26 @@ namespace NexusLogistics
                 foreach (var pf in GameMain.data.factories)
                 {
                     if (pf == null) continue;
-                    pf.powerSystem.consumerPool[pf.factorySystem.assemblerPool[0].entityId].workEnergyPerTick *= (long)multiplier;
-                    foreach (AssemblerComponent ac in pf.factorySystem.assemblerPool)
+                    for (int i = 0; i < pf.factorySystem.assemblerPool.Length; i++)
                     {
+                        var ac = pf.factorySystem.assemblerPool[i];
                         if (ac.id <= 0 || ac.recipeId <= 0) continue;
-                        for (int i = 0; i < ac.products.Length; i++)
+
+                        pf.powerSystem.consumerPool[ac.entityId].workEnergyPerTick *= (long)multiplier;
+
+                        for (int j = 0; j < ac.products.Length; j++)
                         {
-                            if (ac.produced[i] > 0)
-                                ac.produced[i] -= AddItem(ac.products[i], (int)(ac.produced[i] * multiplier), 0)[0];
+                            if (ac.produced[j] > 0)
+                                pf.factorySystem.assemblerPool[i].produced[j] -= AddItem(ac.products[j], (int)(ac.produced[j] * multiplier), 0)[0];
                         }
-                        for (int i = 0; i < ac.requires.Length; i++)
+                        for (int j = 0; j < ac.requires.Length; j++)
                         {
-                            int expectCount = Math.Max((int)(ac.requireCounts[i] * 5 * multiplier) - ac.served[i], 0);
+                            int expectCount = Math.Max((int)(ac.requireCounts[j] * 5 * multiplier) - ac.served[j], 0);
                             if (expectCount > 0)
                             {
-                                int[] result = TakeItem(ac.requires[i], expectCount);
-                                ac.served[i] += result[0];
-                                ac.incServed[i] += result[1];
+                                int[] result = TakeItem(ac.requires[j], expectCount);
+                                pf.factorySystem.assemblerPool[i].served[j] += result[0];
+                                pf.factorySystem.assemblerPool[i].incServed[j] += result[1];
                             }
                         }
                     }
@@ -779,11 +782,13 @@ namespace NexusLogistics
                 foreach (var pf in GameMain.data.factories)
                 {
                     if (pf == null) continue;
-                    pf.powerSystem.consumerPool[pf.factorySystem.minerPool[0].entityId].workEnergyPerTick *= (long)multiplier;
                     for (int i = 0; i < pf.factorySystem.minerPool.Length; i++)
                     {
-                        MinerComponent mc = pf.factorySystem.minerPool[i];
+                        var mc = pf.factorySystem.minerPool[i];
                         if (mc.id <= 0 || mc.productId <= 0 || mc.productCount <= 0) continue;
+
+                        pf.powerSystem.consumerPool[mc.entityId].workEnergyPerTick *= (long)multiplier;
+
                         int[] result = AddItem(mc.productId, (int)(mc.productCount * multiplier), 0);
                         pf.factorySystem.minerPool[i].productCount -= result[0];
                     }
@@ -923,11 +928,14 @@ namespace NexusLogistics
                 foreach (var pf in GameMain.data.factories)
                 {
                     if (pf == null) continue;
-                    pf.powerSystem.consumerPool[pf.factorySystem.siloPool[0].entityId].workEnergyPerTick *= (long)multiplier;
                     for (int i = 0; i < pf.factorySystem.siloPool.Length; i++)
                     {
-                        SiloComponent sc = pf.factorySystem.siloPool[i];
-                        if (sc.id > 0 && sc.bulletCount <= 3)
+                        var sc = pf.factorySystem.siloPool[i];
+                        if (sc.id <= 0) continue;
+
+                        pf.powerSystem.consumerPool[sc.entityId].workEnergyPerTick *= (long)multiplier;
+
+                        if (sc.bulletCount <= 3)
                         {
                             int[] result = TakeItem(sc.bulletId, (int)(10 * multiplier));
                             pf.factorySystem.siloPool[i].bulletCount += result[0];
@@ -947,11 +955,14 @@ namespace NexusLogistics
                 foreach (var pf in GameMain.data.factories)
                 {
                     if (pf == null) continue;
-                    pf.powerSystem.consumerPool[pf.factorySystem.ejectorPool[0].entityId].workEnergyPerTick *= (long)multiplier;
                     for (int i = 0; i < pf.factorySystem.ejectorPool.Length; i++)
                     {
-                        EjectorComponent ec = pf.factorySystem.ejectorPool[i];
-                        if (ec.id > 0 && ec.bulletCount <= 5)
+                        var ec = pf.factorySystem.ejectorPool[i];
+                        if (ec.id <= 0) continue;
+
+                        pf.powerSystem.consumerPool[ec.entityId].workEnergyPerTick *= (long)multiplier;
+
+                        if (ec.bulletCount <= 5)
                         {
                             int[] result = TakeItem(ec.bulletId, (int)(15 * multiplier));
                             pf.factorySystem.ejectorPool[i].bulletCount += result[0];
@@ -971,35 +982,38 @@ namespace NexusLogistics
                 foreach (var pf in GameMain.data.factories)
                 {
                     if (pf == null) continue;
-                    pf.powerSystem.consumerPool[pf.factorySystem.labPool[0].entityId].workEnergyPerTick *= (long)multiplier;
-                    foreach (LabComponent lc in pf.factorySystem.labPool)
+                    for (int i = 0; i < pf.factorySystem.labPool.Length; i++)
                     {
+                        var lc = pf.factorySystem.labPool[i];
                         if (lc.id <= 0) continue;
+
+                        pf.powerSystem.consumerPool[lc.entityId].workEnergyPerTick *= (long)multiplier;
+
                         if (lc.recipeId > 0)
                         {
-                            for (int i = 0; i < lc.products.Length; i++)
+                            for (int j = 0; j < lc.products.Length; j++)
                             {
-                                if (lc.produced[i] > 0)
+                                if (lc.produced[j] > 0)
                                 {
-                                    lc.produced[i] -= AddItem(lc.products[i], (int)(lc.produced[i] * multiplier), 0)[0];
+                                    pf.factorySystem.labPool[i].produced[j] -= AddItem(lc.products[j], (int)(lc.produced[j] * multiplier), 0)[0];
                                 }
                             }
-                            for (int i = 0; i < lc.requires.Length; i++)
+                            for (int j = 0; j < lc.requires.Length; j++)
                             {
-                                int expectCount = (int)(lc.requireCounts[i] * 3 * multiplier) - lc.served[i] - lc.incServed[i];
-                                int[] result = TakeItem(lc.requires[i], expectCount);
-                                lc.served[i] += result[0];
-                                lc.incServed[i] += result[1];
+                                int expectCount = (int)(lc.requireCounts[j] * 3 * multiplier) - lc.served[j] - lc.incServed[j];
+                                int[] result = TakeItem(lc.requires[j], expectCount);
+                                pf.factorySystem.labPool[i].served[j] += result[0];
+                                pf.factorySystem.labPool[i].incServed[j] += result[1];
                             }
                         }
                         else if (lc.researchMode)
                         {
-                            for (int i = 0; i < lc.matrixPoints.Length; i++)
+                            for (int j = 0; j < lc.matrixPoints.Length; j++)
                             {
-                                if (lc.matrixPoints[i] <= 0 || lc.matrixServed[i] >= lc.matrixPoints[i] * 3600) continue;
-                                int[] result = TakeItem(LabComponent.matrixIds[i], (int)(lc.matrixPoints[i] * multiplier));
-                                lc.matrixServed[i] += result[0] * 3600;
-                                lc.matrixIncServed[i] += result[1] * 3600;
+                                if (lc.matrixPoints[j] <= 0 || lc.matrixServed[j] >= lc.matrixPoints[j] * 3600) continue;
+                                int[] result = TakeItem(LabComponent.matrixIds[j], (int)(lc.matrixPoints[j] * multiplier));
+                                pf.factorySystem.labPool[i].matrixServed[j] += result[0] * 3600;
+                                pf.factorySystem.labPool[i].matrixIncServed[j] += result[1] * 3600;
                             }
                         }
                     }
