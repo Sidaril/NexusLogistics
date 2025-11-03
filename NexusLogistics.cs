@@ -118,6 +118,7 @@ namespace NexusLogistics
 
         // GUI State
         private GUIStyle windowStyle, labelStyle, buttonStyle, toggleStyle, toolbarStyle, textFieldStyle, scrollViewStyle;
+        private bool guiStylesInitialized = false;
         private bool showGUI = false;
         private bool showStorageGUI = false;
         private Rect windowRect = new Rect(700, 250, 600, 500);
@@ -172,7 +173,6 @@ namespace NexusLogistics
         {
             BindConfigs();
             InitializeData();
-            InitializeGUIStyles();
 
             // Start the main processing thread.
             new Thread(MainProcessingLoop)
@@ -269,6 +269,12 @@ namespace NexusLogistics
 
         void OnGUI()
         {
+            if (!guiStylesInitialized)
+            {
+                InitializeGUIStyles();
+                guiStylesInitialized = true;
+            }
+
             // Single Source of Truth Input Handler: Process hotkeys here and only here.
             if (Event.current.type == EventType.KeyDown)
             {
