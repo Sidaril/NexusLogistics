@@ -1,6 +1,6 @@
 # NexusLogistics for Dyson Sphere Program
 
-**Version:** 1.4.1
+**Version:** 1.5.0
 
 An unofficial update and feature-rich continuation of the original **PackageLogistic** mod by `qlvlp-com`. NexusLogistics provides a centralized, "magic" logistics network that dramatically simplifies resource management across your entire star cluster, allowing you to focus on designing and expanding your factory.
 
@@ -39,7 +39,7 @@ NexusLogistics creates a global, invisible storage network that acts as a centra
 * **Automatic Proliferation:** Items added to the network can be automatically sprayed with Proliferator MK.I, II, or III. This can be toggled to consume proliferator points or be free.
 * **Item Limit Control:** A new UI allows you to set a storage limit for every item in the network, preventing overproduction of specific resources.
 * **"Infinite" Cheats:** Optional toggles for infinite items, minerals, buildings, soil pile, ammo, and fleet units.
-* **In-Game GUI:** Manage all features through two intuitive in-game windows.
+* **Revamped GUI:** A complete visual overhaul of the UI to match the aesthetic of the base game, featuring a semi-transparent, sci-fi theme and a more readable font.
 
 ## Installation
 
@@ -101,6 +101,14 @@ If you wish to build the mod yourself:
 4.  Build the solution. The `NexusLogistics.dll` will be generated in the `bin/Debug` or `bin/Release` folder.
 
 ## Changelog
+
+### Version 1.5.0
+* **GUI Overhaul:** The entire user interface has been redesigned to better match the visual style of the base game.
+    * Features a new semi-transparent, dark sci-fi theme.
+    * Uses a new, more readable font that fits the game's aesthetic.
+    * All UI elements (windows, buttons, toggles, etc.) have been restyled for a consistent and immersive experience.
+* **Bug Fix:** Corrected a critical runtime error that occurred because GUI elements were being initialized outside of the `OnGUI` method. The mod is now stable.
+* **Build Fix:** Added missing assembly references to the project file to resolve build errors related to Unity's TextRendering and UnityWebRequest modules.
 
 ### Version 1.4.1
 * **Input Overhaul:** Reworked the input handling system to be more robust. Hotkeys now work correctly even when UI windows are focused.
