@@ -98,7 +98,7 @@ namespace NexusLogistics
         private const int SAVE_VERSION = 2;
 
         private enum ProliferatorSelection { All, Mk1, Mk2, Mk3 }
-        private enum StorageCategory { RawResources, IntermediateProducts, BuildingsAndVehicles, AmmunitionAndCombat, ScienceMatrices }
+        private enum StorageCategory { Dashboard, RawResources, IntermediateProducts, BuildingsAndVehicles, AmmunitionAndCombat, ScienceMatrices }
 
         // Remote Storage Data
         private readonly Dictionary<int, RemoteStorageItem> remoteStorage = new Dictionary<int, RemoteStorageItem>();
@@ -127,7 +127,7 @@ namespace NexusLogistics
         private int selectedPanel = 0;
         private readonly Dictionary<int, string> fuelOptions = new Dictionary<int, string>();
         private int selectedFuelIndex;
-        private StorageCategory selectedStorageCategory = StorageCategory.RawResources;
+        private StorageCategory selectedStorageCategory = StorageCategory.Dashboard;
         private readonly Dictionary<int, string> limitInputStrings = new Dictionary<int, string>();
         private List<KeyValuePair<int, RemoteStorageItem>> storageItemsForGUI = new List<KeyValuePair<int, RemoteStorageItem>>();
 
@@ -162,6 +162,26 @@ namespace NexusLogistics
                 return item;
             }
         }
+        #endregion
+
+        #region Statistics Tracking
+
+        private class ItemStats
+        {
+            public readonly Queue<DataPoint> AddedHistory = new Queue<DataPoint>();
+            public readonly Queue<DataPoint> TakenHistory = new Queue<DataPoint>();
+        }
+
+        private struct DataPoint
+        {
+            public DateTime Timestamp;
+            public int Amount;
+        }
+
+        private readonly Dictionary<int, ItemStats> itemStats = new Dictionary<int, ItemStats>();
+        private readonly object itemStatsLock = new object();
+        private const int HistoryMinutes = 30;
+
         #endregion
 
         #region Unity Lifecycle Methods
@@ -507,11 +527,17 @@ namespace NexusLogistics
 
         void StorageWindowFunction(int windowID)
         {
-            string[] categories = { "Raw", "Intermeds", "Buildings", "Combat", "Science" };
+            string[] categories = { "Dashboard", "Raw", "Intermeds", "Buildings", "Combat", "Science" };
             selectedStorageCategory = (StorageCategory)GUILayout.Toolbar((int)selectedStorageCategory, categories, toolbarStyle);
 
-            GUILayout.BeginVertical();
-            GUILayout.Space(5);
+            if (selectedStorageCategory == StorageCategory.Dashboard)
+            {
+                DashboardPanel();
+            }
+            else
+            {
+                GUILayout.BeginVertical();
+                GUILayout.Space(5);
 
             GUILayout.BeginHorizontal();
             GUILayout.Label("Item Name", labelStyle, GUILayout.Width(150));
@@ -579,8 +605,130 @@ namespace NexusLogistics
 
             GUILayout.EndScrollView();
             GUILayout.EndVertical();
+            }
             GUI.DragWindow();
         }
+
+        void DashboardPanel()
+        {
+            storageScrollPosition = GUILayout.BeginScrollView(storageScrollPosition, scrollViewStyle);
+            GUILayout.BeginVertical();
+
+            // Throughput Section
+            GUILayout.Label("Throughput (Last Minute)", windowStyle);
+            var throughput = GetItemThroughput();
+            if (throughput.Any())
+            {
+                foreach (var item in throughput.OrderBy(kv => LDB.items.Select(kv.Key)?.name ?? string.Empty))
+                {
+                    string itemName = LDB.items.Select(item.Key).name;
+                    GUILayout.Label($"{itemName}: Added: {item.Value.added}/min, Taken: {item.Value.taken}/min", labelStyle);
+                }
+            }
+            else
+            {
+                GUILayout.Label("No activity recorded in the last minute.", labelStyle);
+            }
+
+            GUILayout.Space(10);
+
+            // Most Used Items Section
+            GUILayout.Label("Top 10 Most Used Items (Last 30 Mins)", windowStyle);
+            var mostUsed = GetMostUsedItems();
+            if (mostUsed.Any())
+            {
+                int rank = 1;
+                foreach (var item in mostUsed)
+                {
+                    string itemName = LDB.items.Select(item.Key).name;
+                    GUILayout.Label($"{rank++}. {itemName}: {item.Value} units taken", labelStyle);
+                }
+            }
+            else
+            {
+                GUILayout.Label("No items have been used in the last 30 minutes.", labelStyle);
+            }
+
+            GUILayout.Space(10);
+
+            // Bottlenecks Section
+            GUILayout.Label("Potential Bottlenecks (Last 30 Mins)", windowStyle);
+            var bottlenecks = GetPotentialBottlenecks();
+            if (bottlenecks.Any())
+            {
+                foreach (var item in bottlenecks)
+                {
+                    string itemName = LDB.items.Select(item.Key).name;
+                    GUILayout.Label($"{itemName}: Net change of {item.Value}", labelStyle);
+                }
+            }
+            else
+            {
+                GUILayout.Label("No potential bottlenecks detected.", labelStyle);
+            }
+
+            GUILayout.EndVertical();
+            GUILayout.EndScrollView();
+        }
+
+        #region Dashboard Calculations
+
+        private List<KeyValuePair<int, int>> GetMostUsedItems()
+        {
+            var mostUsed = new Dictionary<int, int>();
+            lock (itemStatsLock)
+            {
+                foreach (var pair in itemStats)
+                {
+                    int totalTaken = pair.Value.TakenHistory.Sum(dp => dp.Amount);
+                    if (totalTaken > 0)
+                    {
+                        mostUsed.Add(pair.Key, totalTaken);
+                    }
+                }
+            }
+            return mostUsed.OrderByDescending(kv => kv.Value).Take(10).ToList();
+        }
+
+        private List<KeyValuePair<int, int>> GetPotentialBottlenecks()
+        {
+            var bottlenecks = new Dictionary<int, int>();
+            lock (itemStatsLock)
+            {
+                foreach (var pair in itemStats)
+                {
+                    int totalAdded = pair.Value.AddedHistory.Sum(dp => dp.Amount);
+                    int totalTaken = pair.Value.TakenHistory.Sum(dp => dp.Amount);
+                    int netChange = totalAdded - totalTaken;
+                    if (netChange < 0)
+                    {
+                        bottlenecks.Add(pair.Key, netChange);
+                    }
+                }
+            }
+            return bottlenecks.OrderBy(kv => kv.Value).ToList();
+        }
+
+        private Dictionary<int, (int added, int taken)> GetItemThroughput()
+        {
+            var throughput = new Dictionary<int, (int added, int taken)>();
+            DateTime oneMinuteAgo = DateTime.Now.AddMinutes(-1);
+            lock (itemStatsLock)
+            {
+                foreach (var pair in itemStats)
+                {
+                    int added = pair.Value.AddedHistory.Where(dp => dp.Timestamp >= oneMinuteAgo).Sum(dp => dp.Amount);
+                    int taken = pair.Value.TakenHistory.Where(dp => dp.Timestamp >= oneMinuteAgo).Sum(dp => dp.Amount);
+                    if (added > 0 || taken > 0)
+                    {
+                        throughput.Add(pair.Key, (added, taken));
+                    }
+                }
+            }
+            return throughput;
+        }
+
+        #endregion
 
         void MainPanel()
         {
@@ -1334,6 +1482,11 @@ namespace NexusLogistics
                 storageItem.count += amountToAdd;
                 storageItem.inc += incToAdd;
 
+                if (amountToAdd > 0)
+                {
+                    RecordAdd(itemId, amountToAdd);
+                }
+
                 return new int[] { amountToAdd, incToAdd };
             }
         }
@@ -1374,11 +1527,51 @@ namespace NexusLogistics
                         itemInStorage.count -= takenCount;
                         itemInStorage.inc -= takenInc;
 
+                        if (takenCount > 0)
+                        {
+                            RecordTake(itemId, takenCount);
+                        }
+
                         return new int[] { takenCount, takenInc };
                     }
                 }
             }
             return new int[] { 0, 0 };
+        }
+
+        void RecordAdd(int itemId, int amount)
+        {
+            lock (itemStatsLock)
+            {
+                if (!itemStats.ContainsKey(itemId))
+                {
+                    itemStats[itemId] = new ItemStats();
+                }
+                itemStats[itemId].AddedHistory.Enqueue(new DataPoint { Timestamp = DateTime.Now, Amount = amount });
+                PruneOldData(itemStats[itemId].AddedHistory);
+            }
+        }
+
+        void RecordTake(int itemId, int amount)
+        {
+            lock (itemStatsLock)
+            {
+                if (!itemStats.ContainsKey(itemId))
+                {
+                    itemStats[itemId] = new ItemStats();
+                }
+                itemStats[itemId].TakenHistory.Enqueue(new DataPoint { Timestamp = DateTime.Now, Amount = amount });
+                PruneOldData(itemStats[itemId].TakenHistory);
+            }
+        }
+
+        void PruneOldData(Queue<DataPoint> history)
+        {
+            DateTime cutoff = DateTime.Now.AddMinutes(-HistoryMinutes);
+            while (history.Count > 0 && history.Peek().Timestamp < cutoff)
+            {
+                history.Dequeue();
+            }
         }
 
         int SplitInc(int count, int inc, int expectCount)
