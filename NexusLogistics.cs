@@ -93,7 +93,7 @@ namespace NexusLogistics
         #region Constants and Fields
         public const string GUID = "com.Sidaril.dsp.NexusLogistics";
         public const string NAME = "NexusLogistics";
-        public const string VERSION = "1.4.0";
+        public const string VERSION = "1.4.1";
 
         private const int SAVE_VERSION = 2;
 
@@ -182,20 +182,6 @@ namespace NexusLogistics
 
         void Update()
         {
-            if (hotKey.Value.IsDown())
-            {
-                showGUI = !showGUI;
-            }
-            if (storageHotKey.Value.IsDown())
-            {
-                showStorageGUI = !showStorageGUI;
-                if (showStorageGUI)
-                {
-                    // Refresh the item list for the GUI when it's opened.
-                    RefreshStorageItemsForGUI();
-                }
-            }
-
             // Continuously update the item list if the storage window is open to reflect real-time changes.
             if (showStorageGUI)
             {
@@ -205,6 +191,56 @@ namespace NexusLogistics
 
         void OnGUI()
         {
+            // Single Source of Truth Input Handler: Process hotkeys here and only here.
+            if (Event.current.type == EventType.KeyDown)
+            {
+                // Check for main window hotkey
+                if (Event.current.keyCode == hotKey.Value.MainKey && Event.current.keyCode != KeyCode.None)
+                {
+                    bool wantsCtrl = false, wantsShift = false, wantsAlt = false;
+                    foreach (var m in hotKey.Value.Modifiers)
+                    {
+                        if (m == KeyCode.LeftControl || m == KeyCode.RightControl) wantsCtrl = true;
+                        if (m == KeyCode.LeftShift || m == KeyCode.RightShift) wantsShift = true;
+                        if (m == KeyCode.LeftAlt || m == KeyCode.RightAlt) wantsAlt = true;
+                    }
+                    bool ctrl = (Event.current.modifiers & EventModifiers.Control) != 0;
+                    bool shift = (Event.current.modifiers & EventModifiers.Shift) != 0;
+                    bool alt = (Event.current.modifiers & EventModifiers.Alt) != 0;
+
+                    if (wantsCtrl == ctrl && wantsShift == shift && wantsAlt == alt)
+                    {
+                        showGUI = !showGUI;
+                        Event.current.Use(); // Consume the event to prevent double processing
+                    }
+                }
+
+                // Check for storage window hotkey
+                if (Event.current.keyCode == storageHotKey.Value.MainKey && Event.current.keyCode != KeyCode.None)
+                {
+                    bool wantsCtrl = false, wantsShift = false, wantsAlt = false;
+                    foreach (var m in storageHotKey.Value.Modifiers)
+                    {
+                        if (m == KeyCode.LeftControl || m == KeyCode.RightControl) wantsCtrl = true;
+                        if (m == KeyCode.LeftShift || m == KeyCode.RightShift) wantsShift = true;
+                        if (m == KeyCode.LeftAlt || m == KeyCode.RightAlt) wantsAlt = true;
+                    }
+                    bool ctrl = (Event.current.modifiers & EventModifiers.Control) != 0;
+                    bool shift = (Event.current.modifiers & EventModifiers.Shift) != 0;
+                    bool alt = (Event.current.modifiers & EventModifiers.Alt) != 0;
+
+                    if (wantsCtrl == ctrl && wantsShift == shift && wantsAlt == alt)
+                    {
+                        showStorageGUI = !showStorageGUI;
+                        if (showStorageGUI)
+                        {
+                            RefreshStorageItemsForGUI();
+                        }
+                        Event.current.Use(); // Consume the event to prevent double processing
+                    }
+                }
+            }
+
             if (showGUI)
             {
                 GUI.DrawTexture(windowRect, windowTexture);
@@ -232,8 +268,8 @@ namespace NexusLogistics
         /// </summary>
         private void BindConfigs()
         {
-            hotKey = Config.Bind("Window Shortcut Key", "Key", new KeyboardShortcut(KeyCode.L, KeyCode.LeftControl));
-            storageHotKey = Config.Bind("Window Shortcut Key", "Storage_Key", new KeyboardShortcut(KeyCode.K, KeyCode.LeftControl));
+            hotKey = Config.Bind("Window Shortcut Key", "Key", new KeyboardShortcut(KeyCode.R, KeyCode.LeftControl));
+            storageHotKey = Config.Bind("Window Shortcut Key", "Storage_Key", new KeyboardShortcut(KeyCode.R, KeyCode.LeftShift));
             enableMod = Config.Bind("Configuration", "EnableMod", true, "Enable MOD");
             autoReplenishPackage = Config.Bind("Configuration", "autoReplenishPackage", true, "Automatically replenish items with filtering enabled in the backpack (middle-click on the slot to enable filtering)");
             autoCleanInventory = Config.Bind("Configuration", "AutoCleanInventory", true, "Automatically move items from main inventory to matching logistic slots.");

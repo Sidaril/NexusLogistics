@@ -1,6 +1,6 @@
 # NexusLogistics for Dyson Sphere Program
 
-**Version:** 1.4.0
+**Version:** 1.4.1
 
 An unofficial update and feature-rich continuation of the original **PackageLogistic** mod by `qlvlp-com`. NexusLogistics provides a centralized, "magic" logistics network that dramatically simplifies resource management across your entire star cluster, allowing you to focus on designing and expanding your factory.
 
@@ -57,9 +57,9 @@ This mod requires the following to be installed first:
 
 Once in-game, you can use the following hotkeys to access the mod's features.
 
-* **Toggle Main Window:** `LeftControl + L`
+* **Toggle Main Window:** `LeftControl + R`
     * This window contains the main toggles for enabling the mod, auto-replenishment, auto-spraying, and cheat options.
-* **Toggle Storage Window:** `LeftControl + K`
+* **Toggle Storage Window:** `LeftShift + R`
     * This window shows you the current contents of your central remote storage. You can browse items by category (Raw, Intermediates, Buildings, etc.).
     * **Set Item Limits:** In this window, you can click on the number in the "Limit" column for any item and type a new value to cap how much of that item the network will store.
 
@@ -101,6 +101,11 @@ If you wish to build the mod yourself:
 4.  Build the solution. The `NexusLogistics.dll` will be generated in the `bin/Debug` or `bin/Release` folder.
 
 ## Changelog
+
+### Version 1.4.1
+* **Input Overhaul:** Reworked the input handling system to be more robust. Hotkeys now work correctly even when UI windows are focused.
+* **Bug Fix:** Fixed a bug where hotkeys sharing the same base key (e.g., 'E') would conflict, preventing one of them from working.
+* **Configuration:** Changed the default hotkeys to `LeftControl + R` (Main Window) and `LeftShift + R` (Storage Window) to avoid conflict with the game's default inventory key.
 
 ### Version 1.4.0
 * **Feature:** Player inventory logistic slots will now bypass the global item limit when recycling items back into the network. This ensures you can always clear your logistic slots regardless of storage caps.
