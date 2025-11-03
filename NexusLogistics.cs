@@ -93,7 +93,7 @@ namespace NexusLogistics
         #region Constants and Fields
         public const string GUID = "com.Sidaril.dsp.NexusLogistics";
         public const string NAME = "NexusLogistics";
-        public const string VERSION = "1.4.1";
+        public const string VERSION = "1.5.0";
 
         private const int SAVE_VERSION = 2;
 
