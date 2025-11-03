@@ -611,12 +611,33 @@ namespace NexusLogistics
 
         void DashboardPanel()
         {
+            // Fetch data once at the start of the GUI function to ensure consistency during repaint.
+            var throughput = GetItemThroughput();
+            var mostUsed = GetMostUsedItems();
+            var bottlenecks = GetPotentialBottlenecks();
+
             storageScrollPosition = GUILayout.BeginScrollView(storageScrollPosition, scrollViewStyle);
             GUILayout.BeginVertical();
 
+            // Bottlenecks Section
+            GUILayout.Label("Potential Bottlenecks (Last 30 Mins)", windowStyle);
+            if (bottlenecks.Any())
+            {
+                foreach (var item in bottlenecks)
+                {
+                    string itemName = LDB.items.Select(item.Key).name;
+                    GUILayout.Label($"{itemName}: Net change of {item.Value}", labelStyle);
+                }
+            }
+            else
+            {
+                GUILayout.Label("No potential bottlenecks detected.", labelStyle);
+            }
+
+            GUILayout.Space(10);
+
             // Throughput Section
             GUILayout.Label("Throughput (Last Minute)", windowStyle);
-            var throughput = GetItemThroughput();
             if (throughput.Any())
             {
                 foreach (var item in throughput.OrderBy(kv => LDB.items.Select(kv.Key)?.name ?? string.Empty))
@@ -634,7 +655,6 @@ namespace NexusLogistics
 
             // Most Used Items Section
             GUILayout.Label("Top 10 Most Used Items (Last 30 Mins)", windowStyle);
-            var mostUsed = GetMostUsedItems();
             if (mostUsed.Any())
             {
                 int rank = 1;
@@ -647,24 +667,6 @@ namespace NexusLogistics
             else
             {
                 GUILayout.Label("No items have been used in the last 30 minutes.", labelStyle);
-            }
-
-            GUILayout.Space(10);
-
-            // Bottlenecks Section
-            GUILayout.Label("Potential Bottlenecks (Last 30 Mins)", windowStyle);
-            var bottlenecks = GetPotentialBottlenecks();
-            if (bottlenecks.Any())
-            {
-                foreach (var item in bottlenecks)
-                {
-                    string itemName = LDB.items.Select(item.Key).name;
-                    GUILayout.Label($"{itemName}: Net change of {item.Value}", labelStyle);
-                }
-            }
-            else
-            {
-                GUILayout.Label("No potential bottlenecks detected.", labelStyle);
             }
 
             GUILayout.EndVertical();
