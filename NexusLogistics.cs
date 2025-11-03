@@ -117,12 +117,12 @@ namespace NexusLogistics
         private Dictionary<EAmmoType, List<int>> ammos = new Dictionary<EAmmoType, List<int>>();
 
         // GUI State
+        private GUIStyle windowStyle, labelStyle, buttonStyle, toggleStyle, toolbarStyle, textFieldStyle, scrollViewStyle;
         private bool showGUI = false;
         private bool showStorageGUI = false;
         private Rect windowRect = new Rect(700, 250, 600, 500);
         private Rect storageWindowRect = new Rect(100, 250, 550, 500);
         private Vector2 storageScrollPosition, mainPanelScrollPosition;
-        private readonly Texture2D windowTexture = new Texture2D(10, 10);
         private int selectedPanel = 0;
         private readonly Dictionary<int, string> fuelOptions = new Dictionary<int, string>();
         private int selectedFuelIndex;
@@ -172,12 +172,90 @@ namespace NexusLogistics
         {
             BindConfigs();
             InitializeData();
+            InitializeGUIStyles();
 
             // Start the main processing thread.
             new Thread(MainProcessingLoop)
             {
                 IsBackground = true // Ensure thread doesn't prevent game from closing
             }.Start();
+        }
+
+        /// <summary>
+        /// Creates and configures all the custom GUIStyles for the mod's windows.
+        /// </summary>
+        private Texture2D borderTexture;
+
+        private void InitializeGUIStyles()
+        {
+            // Load Fonts from Assets
+            Font boldFont = new WWW("file://" + Path.Combine(Paths.PluginPath, "Assets/fonts/Vipnagorgialla Bd.otf")).assetBundle.LoadAllAssets<Font>()[0];
+            Font regularFont = new WWW("file://" + Path.Combine(Paths.PluginPath, "Assets/fonts/Vipnagorgialla Rg.otf")).assetBundle.LoadAllAssets<Font>()[0];
+
+            // Define Colors
+            Color backgroundColor = new Color(0.05f, 0.1f, 0.15f, 0.85f);
+            Color borderColor = new Color(0.3f, 0.8f, 1.0f, 0.5f);
+            Color textColor = new Color(0.8f, 0.9f, 1.0f, 1.0f);
+            Color highlightColor = new Color(0.3f, 0.8f, 1.0f, 1.0f);
+
+            // Create Texture for Window Background
+            Texture2D windowBackground = new Texture2D(1, 1);
+            windowBackground.SetPixel(0, 0, backgroundColor);
+            windowBackground.Apply();
+
+            // Create Texture for Border
+            borderTexture = new Texture2D(1, 1);
+            borderTexture.SetPixel(0, 0, borderColor);
+            borderTexture.Apply();
+
+            // Window Style
+            windowStyle = new GUIStyle(GUI.skin.window);
+            windowStyle.font = boldFont;
+            windowStyle.fontSize = 16;
+            windowStyle.normal.background = windowBackground;
+            windowStyle.normal.textColor = highlightColor;
+            windowStyle.onNormal.background = windowBackground;
+            windowStyle.border = new RectOffset(1, 1, 1, 1);
+            windowStyle.padding = new RectOffset(10, 10, 25, 10);
+
+            // Label Style
+            labelStyle = new GUIStyle(GUI.skin.label);
+            labelStyle.font = regularFont;
+            labelStyle.fontSize = 14;
+            labelStyle.normal.textColor = textColor;
+
+            // Button Style
+            buttonStyle = new GUIStyle(GUI.skin.button);
+            buttonStyle.font = regularFont;
+            buttonStyle.fontSize = 14;
+            buttonStyle.normal.textColor = textColor;
+            buttonStyle.hover.textColor = highlightColor;
+
+            // Toggle Style
+            toggleStyle = new GUIStyle(GUI.skin.toggle);
+            toggleStyle.font = regularFont;
+            toggleStyle.fontSize = 14;
+            toggleStyle.normal.textColor = textColor;
+            toggleStyle.onNormal.textColor = highlightColor;
+            toggleStyle.hover.textColor = highlightColor;
+
+            // Toolbar Style
+            toolbarStyle = new GUIStyle(GUI.skin.button);
+            toolbarStyle.font = regularFont;
+            toolbarStyle.fontSize = 14;
+            toolbarStyle.normal.textColor = textColor;
+            toolbarStyle.hover.textColor = highlightColor;
+            toolbarStyle.active.textColor = highlightColor;
+            toolbarStyle.onNormal.textColor = highlightColor;
+
+            // TextField Style
+            textFieldStyle = new GUIStyle(GUI.skin.textField);
+            textFieldStyle.font = regularFont;
+            textFieldStyle.fontSize = 14;
+            textFieldStyle.normal.textColor = textColor;
+
+            // ScrollView Style
+            scrollViewStyle = new GUIStyle(GUI.skin.scrollView);
         }
 
         void Update()
@@ -243,13 +321,13 @@ namespace NexusLogistics
 
             if (showGUI)
             {
-                GUI.DrawTexture(windowRect, windowTexture);
-                windowRect = GUI.Window(0, windowRect, WindowFunction, $"{NAME} {VERSION}");
+                windowRect = GUI.Window(0, windowRect, WindowFunction, $"{NAME} {VERSION}", windowStyle);
+                DrawWindowBorder(windowRect);
             }
             if (showStorageGUI)
             {
-                GUI.DrawTexture(storageWindowRect, windowTexture);
-                storageWindowRect = GUI.Window(1, storageWindowRect, StorageWindowFunction, "Remote Storage Contents");
+                storageWindowRect = GUI.Window(1, storageWindowRect, StorageWindowFunction, "Remote Storage Contents", windowStyle);
+                DrawWindowBorder(storageWindowRect);
             }
 
             // Prevent click-through to the game world when GUI is active.
@@ -257,6 +335,17 @@ namespace NexusLogistics
             {
                 Input.ResetInputAxes();
             }
+        }
+
+        /// <summary>
+        /// Draws a border around the given rectangle using the borderTexture.
+        /// </summary>
+        private void DrawWindowBorder(Rect rect)
+        {
+            GUI.DrawTexture(new Rect(rect.x, rect.y, rect.width, 1), borderTexture); // Top
+            GUI.DrawTexture(new Rect(rect.x, rect.y + rect.height - 1, rect.width, 1), borderTexture); // Bottom
+            GUI.DrawTexture(new Rect(rect.x, rect.y, 1, rect.height), borderTexture); // Left
+            GUI.DrawTexture(new Rect(rect.x + rect.width - 1, rect.y, 1, rect.height), borderTexture); // Right
         }
 
         #endregion
@@ -313,9 +402,6 @@ namespace NexusLogistics
             incPool.Add(ItemIds.ProliferatorMk1, 0);
             incPool.Add(ItemIds.ProliferatorMk2, 0);
             incPool.Add(ItemIds.ProliferatorMk3, 0);
-
-            windowTexture.SetPixels(Enumerable.Repeat(new Color(0, 0, 0, 1), 100).ToArray());
-            windowTexture.Apply();
 
             ammos.Add(EAmmoType.Bullet, new List<int> { ItemIds.GravitonBullet, ItemIds.SuperalloyBullet, ItemIds.TitaniumBullet });
             ammos.Add(EAmmoType.Missile, new List<int> { ItemIds.PrecisionDroney, ItemIds.GravitonMissileSet, ItemIds.SupersonicMissileSet });
@@ -403,7 +489,7 @@ namespace NexusLogistics
         void WindowFunction(int windowID)
         {
             string[] panels = { "Main Options", "Items", "Combat" };
-            selectedPanel = GUILayout.Toolbar(selectedPanel, panels);
+            selectedPanel = GUILayout.Toolbar(selectedPanel, panels, toolbarStyle);
             switch (selectedPanel)
             {
                 case 0: MainPanel(); break;
@@ -416,19 +502,19 @@ namespace NexusLogistics
         void StorageWindowFunction(int windowID)
         {
             string[] categories = { "Raw", "Intermeds", "Buildings", "Combat", "Science" };
-            selectedStorageCategory = (StorageCategory)GUILayout.Toolbar((int)selectedStorageCategory, categories);
+            selectedStorageCategory = (StorageCategory)GUILayout.Toolbar((int)selectedStorageCategory, categories, toolbarStyle);
 
             GUILayout.BeginVertical();
             GUILayout.Space(5);
 
             GUILayout.BeginHorizontal();
-            GUILayout.Label("Item Name", GUILayout.Width(150));
-            GUILayout.Label("Count", GUILayout.Width(100));
-            GUILayout.Label("Proliferation", GUILayout.Width(100));
-            GUILayout.Label("Limit", GUILayout.Width(100));
+            GUILayout.Label("Item Name", labelStyle, GUILayout.Width(150));
+            GUILayout.Label("Count", labelStyle, GUILayout.Width(100));
+            GUILayout.Label("Proliferation", labelStyle, GUILayout.Width(100));
+            GUILayout.Label("Limit", labelStyle, GUILayout.Width(100));
             GUILayout.EndHorizontal();
 
-            storageScrollPosition = GUILayout.BeginScrollView(storageScrollPosition);
+            storageScrollPosition = GUILayout.BeginScrollView(storageScrollPosition, scrollViewStyle);
 
             var originalContentColor = GUI.contentColor;
             try
@@ -447,16 +533,16 @@ namespace NexusLogistics
                     }
 
                     GUILayout.BeginHorizontal();
-                    GUILayout.Label(itemName, GUILayout.Width(150));
-                    GUILayout.Label(item.count.ToString("N0"), GUILayout.Width(100));
+                    GUILayout.Label(itemName, labelStyle, GUILayout.Width(150));
+                    GUILayout.Label(item.count.ToString("N0"), labelStyle, GUILayout.Width(100));
 
                     var (prolifText, prolifColor) = GetProliferationStatus(item.count, item.inc, itemId);
                     GUI.contentColor = prolifColor;
-                    GUILayout.Label(prolifText, GUILayout.Width(100));
+                    GUILayout.Label(prolifText, labelStyle, GUILayout.Width(100));
                     GUI.contentColor = originalContentColor;
 
                     string currentInput = limitInputStrings[itemId];
-                    string newInput = GUILayout.TextField(currentInput, GUILayout.Width(100));
+                    string newInput = GUILayout.TextField(currentInput, textFieldStyle, GUILayout.Width(100));
 
                     if (newInput != currentInput)
                     {
@@ -492,38 +578,38 @@ namespace NexusLogistics
 
         void MainPanel()
         {
-            mainPanelScrollPosition = GUILayout.BeginScrollView(mainPanelScrollPosition, false, true);
+            mainPanelScrollPosition = GUILayout.BeginScrollView(mainPanelScrollPosition, false, true, GUI.skin.horizontalScrollbar, GUI.skin.verticalScrollbar, scrollViewStyle);
             GUILayout.BeginVertical();
             GUILayout.Space(10);
-            enableMod.Value = GUILayout.Toggle(enableMod.Value, "Enable MOD");
-            autoReplenishPackage.Value = GUILayout.Toggle(autoReplenishPackage.Value, "Auto Replenish Filtered Items");
-            autoCleanInventory.Value = GUILayout.Toggle(autoCleanInventory.Value, "Auto Clean Inventory to Logistic Slots");
+            enableMod.Value = GUILayout.Toggle(enableMod.Value, "Enable MOD", toggleStyle);
+            autoReplenishPackage.Value = GUILayout.Toggle(autoReplenishPackage.Value, "Auto Replenish Filtered Items", toggleStyle);
+            autoCleanInventory.Value = GUILayout.Toggle(autoCleanInventory.Value, "Auto Clean Inventory to Logistic Slots", toggleStyle);
 
             GUILayout.Space(15);
             GUILayout.BeginHorizontal();
-            autoSpray.Value = GUILayout.Toggle(autoSpray.Value, "Auto Spray");
+            autoSpray.Value = GUILayout.Toggle(autoSpray.Value, "Auto Spray", toggleStyle);
             if (autoSpray.Value)
             {
-                costProliferator.Value = GUILayout.Toggle(costProliferator.Value, "Consume Proliferator");
+                costProliferator.Value = GUILayout.Toggle(costProliferator.Value, "Consume Proliferator", toggleStyle);
             }
             GUILayout.EndHorizontal();
 
             if (autoSpray.Value)
             {
                 GUILayout.BeginHorizontal();
-                GUILayout.Label("Proliferator Tier:", GUILayout.Width(120));
-                proliferatorSelection.Value = (ProliferatorSelection)GUILayout.Toolbar((int)proliferatorSelection.Value, new string[] { "All", "MK.I", "MK.II", "MK.III" });
+                GUILayout.Label("Proliferator Tier:", labelStyle, GUILayout.Width(120));
+                proliferatorSelection.Value = (ProliferatorSelection)GUILayout.Toolbar((int)proliferatorSelection.Value, new string[] { "All", "MK.I", "MK.II", "MK.III" }, toolbarStyle);
                 GUILayout.EndHorizontal();
             }
 
             GUILayout.Space(15);
-            useStorege.Value = GUILayout.Toggle(useStorege.Value, "Recover from storage boxes/tanks");
+            useStorege.Value = GUILayout.Toggle(useStorege.Value, "Recover from storage boxes/tanks", toggleStyle);
 
             GUILayout.Space(15);
-            autoReplenishTPPFuel.Value = GUILayout.Toggle(autoReplenishTPPFuel.Value, "Auto-refuel Thermal Power Plants");
+            autoReplenishTPPFuel.Value = GUILayout.Toggle(autoReplenishTPPFuel.Value, "Auto-refuel Thermal Power Plants", toggleStyle);
             if (autoReplenishTPPFuel.Value)
             {
-                selectedFuelIndex = GUILayout.SelectionGrid(selectedFuelIndex, fuelOptions.Values.ToArray(), 3, GUI.skin.toggle);
+                selectedFuelIndex = GUILayout.SelectionGrid(selectedFuelIndex, fuelOptions.Values.ToArray(), 3, toggleStyle);
                 fuelId.Value = fuelOptions.Keys.ToArray()[selectedFuelIndex];
             }
 
@@ -533,21 +619,21 @@ namespace NexusLogistics
 
         void ItemPanel()
         {
-            GUILayout.BeginVertical(GUI.skin.box);
-            infBuildings.Value = GUILayout.Toggle(infBuildings.Value, "Infinite Buildings");
-            infVeins.Value = GUILayout.Toggle(infVeins.Value, "Infinite Minerals");
-            infItems.Value = GUILayout.Toggle(infItems.Value, "Infinite Items (Disables Achievements)");
-            infSand.Value = GUILayout.Toggle(infSand.Value, "Infinite Soil Pile");
+            GUILayout.BeginVertical();
+            infBuildings.Value = GUILayout.Toggle(infBuildings.Value, "Infinite Buildings", toggleStyle);
+            infVeins.Value = GUILayout.Toggle(infVeins.Value, "Infinite Minerals", toggleStyle);
+            infItems.Value = GUILayout.Toggle(infItems.Value, "Infinite Items (Disables Achievements)", toggleStyle);
+            infSand.Value = GUILayout.Toggle(infSand.Value, "Infinite Soil Pile", toggleStyle);
             GUILayout.EndVertical();
         }
 
         void FightPanel()
         {
-            GUILayout.BeginVertical(GUI.skin.box);
-            infAmmo.Value = GUILayout.Toggle(infAmmo.Value, "Infinite Ammo");
-            infFleet.Value = GUILayout.Toggle(infFleet.Value, "Infinite Fleet");
+            GUILayout.BeginVertical();
+            infAmmo.Value = GUILayout.Toggle(infAmmo.Value, "Infinite Ammo", toggleStyle);
+            infFleet.Value = GUILayout.Toggle(infFleet.Value, "Infinite Fleet", toggleStyle);
             GUILayout.Space(15);
-            if (GUILayout.Button(new GUIContent("Clear Banned Items from Battle Bases", "Removes items from Battlefield Analysis Bases that you have marked not to be picked up."), GUILayout.ExpandWidth(true)))
+            if (GUILayout.Button(new GUIContent("Clear Banned Items from Battle Bases", "Removes items from Battlefield Analysis Bases that you have marked not to be picked up."), buttonStyle, GUILayout.ExpandWidth(true)))
             {
                 ClearBattleBaseBannedItems();
             }
