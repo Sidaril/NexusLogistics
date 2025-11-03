@@ -188,9 +188,9 @@ namespace NexusLogistics
 
         private void InitializeGUIStyles()
         {
-            // Load Fonts from Assets
-            Font boldFont = new WWW("file://" + Path.Combine(Paths.PluginPath, "Assets/fonts/Vipnagorgialla Bd.otf")).assetBundle.LoadAllAssets<Font>()[0];
-            Font regularFont = new WWW("file://" + Path.Combine(Paths.PluginPath, "Assets/fonts/Vipnagorgialla Rg.otf")).assetBundle.LoadAllAssets<Font>()[0];
+            // Load Fonts from Resources
+            Font boldFont = Resources.Load<Font>("fonts/Vipnagorgialla Bd");
+            Font regularFont = Resources.Load<Font>("fonts/Vipnagorgialla Rg");
 
             // Define Colors
             Color backgroundColor = new Color(0.05f, 0.1f, 0.15f, 0.85f);
