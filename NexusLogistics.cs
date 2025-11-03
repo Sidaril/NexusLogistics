@@ -131,6 +131,13 @@ namespace NexusLogistics
         private readonly Dictionary<int, string> limitInputStrings = new Dictionary<int, string>();
         private List<KeyValuePair<int, RemoteStorageItem>> storageItemsForGUI = new List<KeyValuePair<int, RemoteStorageItem>>();
 
+        // Dashboard Data Cache
+        private List<KeyValuePair<int, int>> cachedBottlenecks = new List<KeyValuePair<int, int>>();
+        private List<KeyValuePair<int, int>> cachedMostUsed = new List<KeyValuePair<int, int>>();
+        private Dictionary<int, (int added, int taken)> cachedThroughput = new Dictionary<int, (int, int)>();
+        private float dashboardRefreshTimer = 0f;
+        private const float DashboardRefreshInterval = 1.0f; // 1 second
+
         #endregion
 
         #region Embedded Classes
@@ -284,6 +291,16 @@ namespace NexusLogistics
             if (showStorageGUI)
             {
                 RefreshStorageItemsForGUI();
+            }
+
+            // Refresh dashboard data periodically
+            dashboardRefreshTimer += Time.deltaTime;
+            if (dashboardRefreshTimer >= DashboardRefreshInterval)
+            {
+                dashboardRefreshTimer = 0f;
+                cachedBottlenecks = GetPotentialBottlenecks();
+                cachedMostUsed = GetMostUsedItems();
+                cachedThroughput = GetItemThroughput();
             }
         }
 
@@ -611,19 +628,14 @@ namespace NexusLogistics
 
         void DashboardPanel()
         {
-            // Fetch data once at the start of the GUI function to ensure consistency during repaint.
-            var throughput = GetItemThroughput();
-            var mostUsed = GetMostUsedItems();
-            var bottlenecks = GetPotentialBottlenecks();
-
             storageScrollPosition = GUILayout.BeginScrollView(storageScrollPosition, scrollViewStyle);
             GUILayout.BeginVertical();
 
             // Bottlenecks Section
             GUILayout.Label("Potential Bottlenecks (Last 30 Mins)", windowStyle);
-            if (bottlenecks.Any())
+            if (cachedBottlenecks.Any())
             {
-                foreach (var item in bottlenecks)
+                foreach (var item in cachedBottlenecks)
                 {
                     string itemName = LDB.items.Select(item.Key).name;
                     GUILayout.Label($"{itemName}: Net change of {item.Value}", labelStyle);
@@ -638,9 +650,9 @@ namespace NexusLogistics
 
             // Throughput Section
             GUILayout.Label("Throughput (Last Minute)", windowStyle);
-            if (throughput.Any())
+            if (cachedThroughput.Any())
             {
-                foreach (var item in throughput.OrderBy(kv => LDB.items.Select(kv.Key)?.name ?? string.Empty))
+                foreach (var item in cachedThroughput.OrderBy(kv => LDB.items.Select(kv.Key)?.name ?? string.Empty))
                 {
                     string itemName = LDB.items.Select(item.Key).name;
                     GUILayout.Label($"{itemName}: Added: {item.Value.added}/min, Taken: {item.Value.taken}/min", labelStyle);
@@ -655,10 +667,10 @@ namespace NexusLogistics
 
             // Most Used Items Section
             GUILayout.Label("Top 10 Most Used Items (Last 30 Mins)", windowStyle);
-            if (mostUsed.Any())
+            if (cachedMostUsed.Any())
             {
                 int rank = 1;
-                foreach (var item in mostUsed)
+                foreach (var item in cachedMostUsed)
                 {
                     string itemName = LDB.items.Select(item.Key).name;
                     GUILayout.Label($"{rank++}. {itemName}: {item.Value} units taken", labelStyle);
