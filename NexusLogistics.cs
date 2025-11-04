@@ -636,7 +636,7 @@ namespace NexusLogistics
                 foreach (var item in cachedBottlenecks)
                 {
                     string itemName = LDB.items.Select(item.Key).name;
-                    GUILayout.Label($"{itemName}: Deficit of {Math.Abs(item.Value)}", labelStyle);
+                    GUILayout.Label($"{itemName}: {Math.Abs(item.Value)}/min deficit", labelStyle);
                 }
             }
             else
@@ -688,7 +688,8 @@ namespace NexusLogistics
         private List<KeyValuePair<int, int>> GetPotentialBottlenecks()
         {
             var bottlenecks = new Dictionary<int, int>();
-            DateTime fiveMinutesAgo = DateTime.Now.AddMinutes(-5);
+            const int sampleMinutes = 5;
+            DateTime fiveMinutesAgo = DateTime.Now.AddMinutes(-sampleMinutes);
             lock (itemStatsLock)
             {
                 foreach (var pair in itemStats)
@@ -696,10 +697,13 @@ namespace NexusLogistics
                     int totalAdded = pair.Value.AddedHistory.Where(dp => dp.Timestamp >= fiveMinutesAgo).Sum(dp => dp.Amount);
                     int totalTaken = pair.Value.TakenHistory.Where(dp => dp.Timestamp >= fiveMinutesAgo).Sum(dp => dp.Amount);
 
-                    if (totalTaken > totalAdded)
+                    float productionRate = totalAdded / (float)sampleMinutes;
+                    float consumptionRate = totalTaken / (float)sampleMinutes;
+
+                    if (consumptionRate > productionRate)
                     {
-                        int netChange = totalAdded - totalTaken;
-                        bottlenecks.Add(pair.Key, netChange);
+                        int deficitPerMinute = (int)Math.Round(productionRate - consumptionRate);
+                        bottlenecks.Add(pair.Key, deficitPerMinute);
                     }
                 }
             }
