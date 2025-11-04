@@ -134,7 +134,6 @@ namespace NexusLogistics
         // Dashboard Data Cache
         private List<KeyValuePair<int, int>> cachedBottlenecks = new List<KeyValuePair<int, int>>();
         private List<KeyValuePair<int, int>> cachedMostUsed = new List<KeyValuePair<int, int>>();
-        private Dictionary<int, (int added, int taken)> cachedThroughput = new Dictionary<int, (int, int)>();
         private float dashboardRefreshTimer = 0f;
         private const float DashboardRefreshInterval = 1.0f; // 1 second
 
@@ -300,7 +299,6 @@ namespace NexusLogistics
                 dashboardRefreshTimer = 0f;
                 cachedBottlenecks = GetPotentialBottlenecks();
                 cachedMostUsed = GetMostUsedItems();
-                cachedThroughput = GetItemThroughput();
             }
         }
 
@@ -632,35 +630,18 @@ namespace NexusLogistics
             GUILayout.BeginVertical();
 
             // Bottlenecks Section
-            GUILayout.Label("Potential Bottlenecks (Last 30 Mins)", windowStyle);
+            GUILayout.Label("Potential Bottlenecks (Last 5 Mins)", windowStyle);
             if (cachedBottlenecks.Any())
             {
                 foreach (var item in cachedBottlenecks)
                 {
                     string itemName = LDB.items.Select(item.Key).name;
-                    GUILayout.Label($"{itemName}: Net change of {item.Value}", labelStyle);
+                    GUILayout.Label($"{itemName}: Deficit of {Math.Abs(item.Value)}", labelStyle);
                 }
             }
             else
             {
                 GUILayout.Label("No potential bottlenecks detected.", labelStyle);
-            }
-
-            GUILayout.Space(10);
-
-            // Throughput Section
-            GUILayout.Label("Throughput (Last Minute)", windowStyle);
-            if (cachedThroughput.Any())
-            {
-                foreach (var item in cachedThroughput.OrderBy(kv => LDB.items.Select(kv.Key)?.name ?? string.Empty))
-                {
-                    string itemName = LDB.items.Select(item.Key).name;
-                    GUILayout.Label($"{itemName}: Added: {item.Value.added}/min, Taken: {item.Value.taken}/min", labelStyle);
-                }
-            }
-            else
-            {
-                GUILayout.Label("No activity recorded in the last minute.", labelStyle);
             }
 
             GUILayout.Space(10);
@@ -707,39 +688,22 @@ namespace NexusLogistics
         private List<KeyValuePair<int, int>> GetPotentialBottlenecks()
         {
             var bottlenecks = new Dictionary<int, int>();
+            DateTime fiveMinutesAgo = DateTime.Now.AddMinutes(-5);
             lock (itemStatsLock)
             {
                 foreach (var pair in itemStats)
                 {
-                    int totalAdded = pair.Value.AddedHistory.Sum(dp => dp.Amount);
-                    int totalTaken = pair.Value.TakenHistory.Sum(dp => dp.Amount);
-                    int netChange = totalAdded - totalTaken;
-                    if (netChange < 0)
+                    int totalAdded = pair.Value.AddedHistory.Where(dp => dp.Timestamp >= fiveMinutesAgo).Sum(dp => dp.Amount);
+                    int totalTaken = pair.Value.TakenHistory.Where(dp => dp.Timestamp >= fiveMinutesAgo).Sum(dp => dp.Amount);
+
+                    if (totalTaken > totalAdded)
                     {
+                        int netChange = totalAdded - totalTaken;
                         bottlenecks.Add(pair.Key, netChange);
                     }
                 }
             }
             return bottlenecks.OrderBy(kv => kv.Value).ToList();
-        }
-
-        private Dictionary<int, (int added, int taken)> GetItemThroughput()
-        {
-            var throughput = new Dictionary<int, (int added, int taken)>();
-            DateTime oneMinuteAgo = DateTime.Now.AddMinutes(-1);
-            lock (itemStatsLock)
-            {
-                foreach (var pair in itemStats)
-                {
-                    int added = pair.Value.AddedHistory.Where(dp => dp.Timestamp >= oneMinuteAgo).Sum(dp => dp.Amount);
-                    int taken = pair.Value.TakenHistory.Where(dp => dp.Timestamp >= oneMinuteAgo).Sum(dp => dp.Amount);
-                    if (added > 0 || taken > 0)
-                    {
-                        throughput.Add(pair.Key, (added, taken));
-                    }
-                }
-            }
-            return throughput;
         }
 
         #endregion
