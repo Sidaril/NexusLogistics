@@ -648,7 +648,7 @@ namespace NexusLogistics
             GUILayout.BeginVertical();
 
             // Bottlenecks Section
-            GUILayout.Label("Persistent Bottlenecks (Last 5 Mins)", windowStyle);
+            GUILayout.Label("Bottlenecks", windowStyle);
             if (cachedBottlenecks.Any())
             {
                 foreach (var item in cachedBottlenecks)
