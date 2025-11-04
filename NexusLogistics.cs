@@ -135,6 +135,8 @@ namespace NexusLogistics
         private List<KeyValuePair<int, int>> cachedBottlenecks = new List<KeyValuePair<int, int>>();
         private float dashboardRefreshTimer = 0f;
         private const float DashboardRefreshInterval = 1.0f; // 1 second
+        private Dictionary<int, int> bottleneckCounters = new Dictionary<int, int>();
+        private const int BottleneckPersistenceThreshold = 3; // 3 seconds
 
         #endregion
 
@@ -296,7 +298,25 @@ namespace NexusLogistics
             if (dashboardRefreshTimer >= DashboardRefreshInterval)
             {
                 dashboardRefreshTimer = 0f;
-                cachedBottlenecks = GetPotentialBottlenecks();
+                var currentBottlenecks = GetPotentialBottlenecks();
+                var bottleneckIds = new HashSet<int>(currentBottlenecks.Select(kv => kv.Key));
+
+                foreach (var item in currentBottlenecks)
+                {
+                    if (!bottleneckCounters.ContainsKey(item.Key))
+                    {
+                        bottleneckCounters[item.Key] = 0;
+                    }
+                    bottleneckCounters[item.Key]++;
+                }
+
+                var itemsToRemove = bottleneckCounters.Keys.Where(key => !bottleneckIds.Contains(key)).ToList();
+                foreach (var key in itemsToRemove)
+                {
+                    bottleneckCounters.Remove(key);
+                }
+
+                cachedBottlenecks = currentBottlenecks.Where(kv => bottleneckCounters.ContainsKey(kv.Key) && bottleneckCounters[kv.Key] >= BottleneckPersistenceThreshold).ToList();
             }
         }
 
@@ -628,7 +648,7 @@ namespace NexusLogistics
             GUILayout.BeginVertical();
 
             // Bottlenecks Section
-            GUILayout.Label("Potential Bottlenecks (Last 5 Mins)", windowStyle);
+            GUILayout.Label("Persistent Bottlenecks (Last 5 Mins)", windowStyle);
             if (cachedBottlenecks.Any())
             {
                 foreach (var item in cachedBottlenecks)
