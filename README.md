@@ -1,6 +1,6 @@
 # NexusLogistics for Dyson Sphere Program
 
-**Version:** 1.5.0
+**Version:** 1.6.0
 
 An unofficial update and feature-rich continuation of the original **PackageLogistic** mod by `qlvlp-com`. NexusLogistics provides a centralized, "magic" logistics network that dramatically simplifies resource management across your entire star cluster, allowing you to focus on designing and expanding your factory.
 
@@ -40,6 +40,9 @@ NexusLogistics creates a global, invisible storage network that acts as a centra
 * **Item Limit Control:** A new UI allows you to set a storage limit for every item in the network, preventing overproduction of specific resources.
 * **"Infinite" Cheats:** Optional toggles for infinite items, minerals, buildings, soil pile, ammo, and fleet units.
 * **Revamped GUI:** A complete visual overhaul of the UI to match the aesthetic of the base game, featuring a semi-transparent, sci-fi theme and a more readable font.
+* **Logistics Dashboard:** A new "Dashboard" tab in the Remote Storage window provides at-a-glance statistics about your logistics network, helping you identify bottlenecks before they become critical.
+    * **Bottleneck Detection:** The dashboard intelligently tracks item consumption versus production over time. If an item is being used faster than it's being supplied, it will be listed as a bottleneck.
+    * **Time to Depletion:** Alongside the deficit-per-minute, the dashboard shows an estimated "Time to Depletion" (ETA), telling you exactly how urgent a shortfall is.
 
 ## Installation
 
@@ -101,6 +104,12 @@ If you wish to build the mod yourself:
 4.  Build the solution. The `NexusLogistics.dll` will be generated in the `bin/Debug` or `bin/Release` folder.
 
 ## Changelog
+
+### Version 1.6.0
+* **Feature: Logistics Dashboard:** Added a new "Dashboard" tab to the Remote Storage window to provide actionable insights into the logistics network.
+    * **Bottleneck Detection:** The dashboard identifies items where consumption is consistently higher than production over the last 5 minutes.
+    * **Time to Depletion:** For each bottlenecked item, the UI now displays an estimated "Time to Depletion," helping players prioritize which shortages to address first.
+* **Code Refinement:** The underlying statistics-gathering and caching logic was refactored to be more robust and thread-safe, preventing UI errors.
 
 ### Version 1.5.0
 * **GUI Overhaul:** The entire user interface has been redesigned to better match the visual style of the base game.
