@@ -133,7 +133,6 @@ namespace NexusLogistics
 
         // Dashboard Data Cache
         private List<KeyValuePair<int, int>> cachedBottlenecks = new List<KeyValuePair<int, int>>();
-        private List<KeyValuePair<int, int>> cachedMostUsed = new List<KeyValuePair<int, int>>();
         private float dashboardRefreshTimer = 0f;
         private const float DashboardRefreshInterval = 1.0f; // 1 second
 
@@ -298,7 +297,6 @@ namespace NexusLogistics
             {
                 dashboardRefreshTimer = 0f;
                 cachedBottlenecks = GetPotentialBottlenecks();
-                cachedMostUsed = GetMostUsedItems();
             }
         }
 
@@ -644,46 +642,11 @@ namespace NexusLogistics
                 GUILayout.Label("No potential bottlenecks detected.", labelStyle);
             }
 
-            GUILayout.Space(10);
-
-            // Most Used Items Section
-            GUILayout.Label("Top 10 Most Used Items (Last 30 Mins)", windowStyle);
-            if (cachedMostUsed.Any())
-            {
-                int rank = 1;
-                foreach (var item in cachedMostUsed)
-                {
-                    string itemName = LDB.items.Select(item.Key).name;
-                    GUILayout.Label($"{rank++}. {itemName}: {item.Value} units taken", labelStyle);
-                }
-            }
-            else
-            {
-                GUILayout.Label("No items have been used in the last 30 minutes.", labelStyle);
-            }
-
             GUILayout.EndVertical();
             GUILayout.EndScrollView();
         }
 
         #region Dashboard Calculations
-
-        private List<KeyValuePair<int, int>> GetMostUsedItems()
-        {
-            var mostUsed = new Dictionary<int, int>();
-            lock (itemStatsLock)
-            {
-                foreach (var pair in itemStats)
-                {
-                    int totalTaken = pair.Value.TakenHistory.Sum(dp => dp.Amount);
-                    if (totalTaken > 0)
-                    {
-                        mostUsed.Add(pair.Key, totalTaken);
-                    }
-                }
-            }
-            return mostUsed.OrderByDescending(kv => kv.Value).Take(10).ToList();
-        }
 
         private List<KeyValuePair<int, int>> GetPotentialBottlenecks()
         {
