@@ -132,7 +132,13 @@ namespace NexusLogistics
         private List<KeyValuePair<int, RemoteStorageItem>> storageItemsForGUI = new List<KeyValuePair<int, RemoteStorageItem>>();
 
         // Dashboard Data Cache
-        private List<KeyValuePair<int, int>> cachedBottlenecks = new List<KeyValuePair<int, int>>();
+        private struct BottleneckInfo
+        {
+            public int ItemId;
+            public int DeficitPerMinute;
+            public int CurrentStock;
+        }
+        private List<BottleneckInfo> cachedBottlenecks = new List<BottleneckInfo>();
         private float dashboardRefreshTimer = 0f;
         private const float DashboardRefreshInterval = 1.0f; // 1 second
         private Dictionary<int, int> bottleneckCounters = new Dictionary<int, int>();
@@ -299,15 +305,15 @@ namespace NexusLogistics
             {
                 dashboardRefreshTimer = 0f;
                 var currentBottlenecks = GetPotentialBottlenecks();
-                var bottleneckIds = new HashSet<int>(currentBottlenecks.Select(kv => kv.Key));
+                var bottleneckIds = new HashSet<int>(currentBottlenecks.Select(b => b.ItemId));
 
                 foreach (var item in currentBottlenecks)
                 {
-                    if (!bottleneckCounters.ContainsKey(item.Key))
+                    if (!bottleneckCounters.ContainsKey(item.ItemId))
                     {
-                        bottleneckCounters[item.Key] = 0;
+                        bottleneckCounters[item.ItemId] = 0;
                     }
-                    bottleneckCounters[item.Key]++;
+                    bottleneckCounters[item.ItemId]++;
                 }
 
                 var itemsToRemove = bottleneckCounters.Keys.Where(key => !bottleneckIds.Contains(key)).ToList();
@@ -316,7 +322,9 @@ namespace NexusLogistics
                     bottleneckCounters.Remove(key);
                 }
 
-                cachedBottlenecks = currentBottlenecks.Where(kv => bottleneckCounters.ContainsKey(kv.Key) && bottleneckCounters[kv.Key] >= BottleneckPersistenceThreshold).ToList();
+                cachedBottlenecks = currentBottlenecks
+                    .Where(b => bottleneckCounters.ContainsKey(b.ItemId) && bottleneckCounters[b.ItemId] >= BottleneckPersistenceThreshold)
+                    .ToList();
             }
         }
 
@@ -651,10 +659,19 @@ namespace NexusLogistics
             GUILayout.Label("Bottlenecks", windowStyle);
             if (cachedBottlenecks.Any())
             {
-                foreach (var item in cachedBottlenecks)
+                foreach (var bottleneck in cachedBottlenecks)
                 {
-                    string itemName = LDB.items.Select(item.Key).name;
-                    GUILayout.Label($"{itemName}: {Math.Abs(item.Value)}/min deficit", labelStyle);
+                    string itemName = LDB.items.Select(bottleneck.ItemId).name;
+                    string deficitText = $"{Math.Abs(bottleneck.DeficitPerMinute)}/min deficit";
+
+                    string etaText = "";
+                    if (bottleneck.DeficitPerMinute < 0)
+                    {
+                        double minutesToDepletion = (double)bottleneck.CurrentStock / Math.Abs(bottleneck.DeficitPerMinute);
+                        etaText = $" (ETA: {FormatDuration(minutesToDepletion)})";
+                    }
+
+                    GUILayout.Label($"{itemName}: {deficitText}{etaText}", labelStyle);
                 }
             }
             else
@@ -668,11 +685,46 @@ namespace NexusLogistics
 
         #region Dashboard Calculations
 
-        private List<KeyValuePair<int, int>> GetPotentialBottlenecks()
+        private string FormatDuration(double minutes)
         {
-            var bottlenecks = new Dictionary<int, int>();
+            if (double.IsInfinity(minutes) || minutes > 60 * 24 * 30) // Cap at 30 days for readability
+            {
+                return ">30d";
+            }
+            if (minutes < 1)
+            {
+                return "<1m";
+            }
+            if (minutes < 60)
+            {
+                return $"{minutes:F0}m";
+            }
+
+            double hours = minutes / 60.0;
+            if (hours < 24)
+            {
+                int h = (int)hours;
+                int m = (int)Math.Round((hours - h) * 60);
+                return $"{h}h{m:D2}m";
+            }
+
+            double days = hours / 24.0;
+            return $"{days:F1}d";
+        }
+
+        private List<BottleneckInfo> GetPotentialBottlenecks()
+        {
+            var bottlenecks = new List<BottleneckInfo>();
             const int sampleMinutes = 5;
             DateTime fiveMinutesAgo = DateTime.Now.AddMinutes(-sampleMinutes);
+
+            // Create a snapshot of the remote storage to avoid locking it for too long.
+            Dictionary<int, int> currentStockSnapshot;
+            lock (remoteStorageLock)
+            {
+                currentStockSnapshot = remoteStorage.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.count);
+            }
+
             lock (itemStatsLock)
             {
                 foreach (var pair in itemStats)
@@ -686,11 +738,18 @@ namespace NexusLogistics
                     if (consumptionRate > productionRate)
                     {
                         int deficitPerMinute = (int)Math.Round(productionRate - consumptionRate);
-                        bottlenecks.Add(pair.Key, deficitPerMinute);
+                        int currentStock = currentStockSnapshot.ContainsKey(pair.Key) ? currentStockSnapshot[pair.Key] : 0;
+
+                        bottlenecks.Add(new BottleneckInfo
+                        {
+                            ItemId = pair.Key,
+                            DeficitPerMinute = deficitPerMinute,
+                            CurrentStock = currentStock
+                        });
                     }
                 }
             }
-            return bottlenecks.OrderBy(kv => kv.Value).ToList();
+            return bottlenecks.OrderBy(b => b.DeficitPerMinute).ToList();
         }
 
         #endregion
