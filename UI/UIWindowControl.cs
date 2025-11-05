@@ -80,7 +80,7 @@ namespace NexusLogistics.UI
             }
 
             [HarmonyPostfix]
-            [HarmonyPatch(typeof(UIGame), "Update")]
+            [HarmonyPatch(typeof(UIGame), "_OnUpdate")]
             public static void UIGame_Update_Postfix()
             {
                 if (VFInput.escape && !VFInput.inputing)
