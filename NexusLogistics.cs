@@ -9,6 +9,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
+using NexusLogistics.UI;
 
 namespace NexusLogistics
 {
@@ -101,35 +102,23 @@ namespace NexusLogistics
         private enum StorageCategory { Dashboard, RawResources, IntermediateProducts, BuildingsAndVehicles, AmmunitionAndCombat, ScienceMatrices }
 
         // Remote Storage Data
-        private readonly Dictionary<int, RemoteStorageItem> remoteStorage = new Dictionary<int, RemoteStorageItem>();
-        private readonly object remoteStorageLock = new object();
+        private static readonly Dictionary<int, RemoteStorageItem> remoteStorage = new Dictionary<int, RemoteStorageItem>();
+        private static readonly object remoteStorageLock = new object();
 
         // Configuration Entries
-        private ConfigEntry<bool> autoSpray, costProliferator, infVeins, infItems, infSand, infBuildings, useStorege, autoCleanInventory;
-        private ConfigEntry<bool> enableMod, autoReplenishPackage, autoReplenishTPPFuel, infFleet, infAmmo;
+        public static ConfigEntry<bool> autoSpray, costProliferator, infVeins, infItems, infSand, infBuildings, useStorege, autoCleanInventory;
+        public static ConfigEntry<bool> enableMod, autoReplenishPackage, autoReplenishTPPFuel, infFleet, infAmmo;
         private ConfigEntry<KeyboardShortcut> hotKey, storageHotKey;
-        private ConfigEntry<ProliferatorSelection> proliferatorSelection;
-        private ConfigEntry<int> fuelId;
+        public static ConfigEntry<ProliferatorSelection> proliferatorSelection;
+        public static ConfigEntry<int> fuelId;
 
         // Proliferation and Item Data
         private readonly List<(int, int)> proliferators = new List<(int, int)>();
         private readonly Dictionary<int, int> incPool = new Dictionary<int, int>();
         private Dictionary<EAmmoType, List<int>> ammos = new Dictionary<EAmmoType, List<int>>();
 
-        // GUI State
-        private GUIStyle windowStyle, labelStyle, buttonStyle, toggleStyle, toolbarStyle, textFieldStyle, scrollViewStyle;
-        private bool guiStylesInitialized = false;
-        private bool showGUI = false;
-        private bool showStorageGUI = false;
-        private Rect windowRect = new Rect(700, 250, 600, 500);
-        private Rect storageWindowRect = new Rect(100, 250, 550, 500);
-        private Vector2 storageScrollPosition, mainPanelScrollPosition;
-        private int selectedPanel = 0;
-        private readonly Dictionary<int, string> fuelOptions = new Dictionary<int, string>();
-        private int selectedFuelIndex;
-        private StorageCategory selectedStorageCategory = StorageCategory.Dashboard;
-        private readonly Dictionary<int, string> limitInputStrings = new Dictionary<int, string>();
-        private List<KeyValuePair<int, RemoteStorageItem>> storageItemsForGUI = new List<KeyValuePair<int, RemoteStorageItem>>();
+        public static readonly Dictionary<int, string> fuelOptions = new Dictionary<int, string>();
+        public static List<KeyValuePair<int, RemoteStorageItem>> storageItemsForGUI = new List<KeyValuePair<int, RemoteStorageItem>>();
 
         // Dashboard Data Cache
         private struct BottleneckInfo
@@ -138,10 +127,10 @@ namespace NexusLogistics
             public int DeficitPerMinute;
             public int CurrentStock;
         }
-        private List<BottleneckInfo> cachedBottlenecks = new List<BottleneckInfo>();
+        public static List<BottleneckInfo> cachedBottlenecks = new List<BottleneckInfo>();
         private float dashboardRefreshTimer = 0f;
         private const float DashboardRefreshInterval = 1.0f; // 1 second
-        private Dictionary<int, int> bottleneckCounters = new Dictionary<int, int>();
+        public static Dictionary<int, int> bottleneckCounters = new Dictionary<int, int>();
         private const int BottleneckPersistenceThreshold = 3; // 3 seconds
 
         #endregion
@@ -207,6 +196,10 @@ namespace NexusLogistics
             BindConfigs();
             InitializeData();
 
+            // Add this line to patch the UI control methods
+            Harmony.CreateAndPatchAll(typeof(UIWindowControl.Patch));
+            Harmony.CreateAndPatchAll(typeof(NexusLogisticsPatch));
+
             // Start the main processing thread.
             new Thread(MainProcessingLoop)
             {
@@ -214,89 +207,42 @@ namespace NexusLogistics
             }.Start();
         }
 
-        /// <summary>
-        /// Creates and configures all the custom GUIStyles for the mod's windows.
-        /// </summary>
-        private Texture2D borderTexture;
-
-        private void InitializeGUIStyles()
+        // Add this new inner class inside NexusLogistics.cs
+        [HarmonyPatch]
+        public static class NexusLogisticsPatch
         {
-            // Load Fonts from Resources
-            Font boldFont = Resources.Load<Font>("fonts/Vipnagorgialla Bd");
-            Font regularFont = Resources.Load<Font>("fonts/Vipnagorgialla Rg");
-
-            // Define Colors
-            Color backgroundColor = new Color(0.05f, 0.1f, 0.15f, 0.85f);
-            Color borderColor = new Color(0.3f, 0.8f, 1.0f, 0.5f);
-            Color textColor = new Color(0.8f, 0.9f, 1.0f, 1.0f);
-            Color highlightColor = new Color(0.3f, 0.8f, 1.0f, 1.0f);
-
-            // Create Texture for Window Background
-            Texture2D windowBackground = new Texture2D(1, 1);
-            windowBackground.SetPixel(0, 0, backgroundColor);
-            windowBackground.Apply();
-
-            // Create Texture for Border
-            borderTexture = new Texture2D(1, 1);
-            borderTexture.SetPixel(0, 0, borderColor);
-            borderTexture.Apply();
-
-            // Window Style
-            windowStyle = new GUIStyle(GUI.skin.window);
-            windowStyle.font = boldFont;
-            windowStyle.fontSize = 16;
-            windowStyle.normal.background = windowBackground;
-            windowStyle.normal.textColor = highlightColor;
-            windowStyle.onNormal.background = windowBackground;
-            windowStyle.border = new RectOffset(1, 1, 1, 1);
-            windowStyle.padding = new RectOffset(10, 10, 25, 10);
-
-            // Label Style
-            labelStyle = new GUIStyle(GUI.skin.label);
-            labelStyle.font = regularFont;
-            labelStyle.fontSize = 14;
-            labelStyle.normal.textColor = textColor;
-
-            // Button Style
-            buttonStyle = new GUIStyle(GUI.skin.button);
-            buttonStyle.font = regularFont;
-            buttonStyle.fontSize = 14;
-            buttonStyle.normal.textColor = textColor;
-            buttonStyle.hover.textColor = highlightColor;
-
-            // Toggle Style
-            toggleStyle = new GUIStyle(GUI.skin.toggle);
-            toggleStyle.font = regularFont;
-            toggleStyle.fontSize = 14;
-            toggleStyle.normal.textColor = textColor;
-            toggleStyle.onNormal.textColor = highlightColor;
-            toggleStyle.hover.textColor = highlightColor;
-
-            // Toolbar Style
-            toolbarStyle = new GUIStyle(GUI.skin.button);
-            toolbarStyle.font = regularFont;
-            toolbarStyle.fontSize = 14;
-            toolbarStyle.normal.textColor = textColor;
-            toolbarStyle.hover.textColor = highlightColor;
-            toolbarStyle.active.textColor = highlightColor;
-            toolbarStyle.onNormal.textColor = highlightColor;
-
-            // TextField Style
-            textFieldStyle = new GUIStyle(GUI.skin.textField);
-            textFieldStyle.font = regularFont;
-            textFieldStyle.fontSize = 14;
-            textFieldStyle.normal.textColor = textColor;
-
-            // ScrollView Style
-            scrollViewStyle = new GUIStyle(GUI.skin.scrollView);
+            [HarmonyPostfix, HarmonyPatch(typeof(GameMain), "Begin")]
+            public static void GameMain_Begin_Postfix()
+            {
+                // This is the safest place to create your UI windows
+                UINexusMainWindow.CreateInstance();
+                UINexusStorageWindow.CreateInstance(); // Create your storage window here too
+            }
         }
 
         void Update()
         {
-            // Continuously update the item list if the storage window is open to reflect real-time changes.
-            if (showStorageGUI)
+            // This is your *new* hotkey logic
+            if (hotKey.Value.IsDown())
             {
-                RefreshStorageItemsForGUI();
+                if (UINexusMainWindow.instance != null)
+                {
+                    if (UINexusMainWindow.instance.active)
+                        UINexusMainWindow.instance._Close();
+                    else
+                        UIWindowControl.OpenWindow(UINexusMainWindow.instance);
+                }
+            }
+
+            if (storageHotKey.Value.IsDown())
+            {
+                if (UINexusStorageWindow.instance != null)
+                {
+                    if (UINexusStorageWindow.instance.active)
+                        UINexusStorageWindow.instance._Close();
+                    else
+                        UIWindowControl.OpenWindow(UINexusStorageWindow.instance);
+                }
             }
 
             // Refresh dashboard data periodically
@@ -326,93 +272,6 @@ namespace NexusLogistics
                     .Where(b => bottleneckCounters.ContainsKey(b.ItemId) && bottleneckCounters[b.ItemId] >= BottleneckPersistenceThreshold)
                     .ToList();
             }
-        }
-
-        void OnGUI()
-        {
-            if (!guiStylesInitialized)
-            {
-                InitializeGUIStyles();
-                guiStylesInitialized = true;
-            }
-
-            // Single Source of Truth Input Handler: Process hotkeys here and only here.
-            if (Event.current.type == EventType.KeyDown)
-            {
-                // Check for main window hotkey
-                if (Event.current.keyCode == hotKey.Value.MainKey && Event.current.keyCode != KeyCode.None)
-                {
-                    bool wantsCtrl = false, wantsShift = false, wantsAlt = false;
-                    foreach (var m in hotKey.Value.Modifiers)
-                    {
-                        if (m == KeyCode.LeftControl || m == KeyCode.RightControl) wantsCtrl = true;
-                        if (m == KeyCode.LeftShift || m == KeyCode.RightShift) wantsShift = true;
-                        if (m == KeyCode.LeftAlt || m == KeyCode.RightAlt) wantsAlt = true;
-                    }
-                    bool ctrl = (Event.current.modifiers & EventModifiers.Control) != 0;
-                    bool shift = (Event.current.modifiers & EventModifiers.Shift) != 0;
-                    bool alt = (Event.current.modifiers & EventModifiers.Alt) != 0;
-
-                    if (wantsCtrl == ctrl && wantsShift == shift && wantsAlt == alt)
-                    {
-                        showGUI = !showGUI;
-                        Event.current.Use(); // Consume the event to prevent double processing
-                    }
-                }
-
-                // Check for storage window hotkey
-                if (Event.current.keyCode == storageHotKey.Value.MainKey && Event.current.keyCode != KeyCode.None)
-                {
-                    bool wantsCtrl = false, wantsShift = false, wantsAlt = false;
-                    foreach (var m in storageHotKey.Value.Modifiers)
-                    {
-                        if (m == KeyCode.LeftControl || m == KeyCode.RightControl) wantsCtrl = true;
-                        if (m == KeyCode.LeftShift || m == KeyCode.RightShift) wantsShift = true;
-                        if (m == KeyCode.LeftAlt || m == KeyCode.RightAlt) wantsAlt = true;
-                    }
-                    bool ctrl = (Event.current.modifiers & EventModifiers.Control) != 0;
-                    bool shift = (Event.current.modifiers & EventModifiers.Shift) != 0;
-                    bool alt = (Event.current.modifiers & EventModifiers.Alt) != 0;
-
-                    if (wantsCtrl == ctrl && wantsShift == shift && wantsAlt == alt)
-                    {
-                        showStorageGUI = !showStorageGUI;
-                        if (showStorageGUI)
-                        {
-                            RefreshStorageItemsForGUI();
-                        }
-                        Event.current.Use(); // Consume the event to prevent double processing
-                    }
-                }
-            }
-
-            if (showGUI)
-            {
-                windowRect = GUI.Window(0, windowRect, WindowFunction, $"{NAME} {VERSION}", windowStyle);
-                DrawWindowBorder(windowRect);
-            }
-            if (showStorageGUI)
-            {
-                storageWindowRect = GUI.Window(1, storageWindowRect, StorageWindowFunction, "Remote Storage Contents", windowStyle);
-                DrawWindowBorder(storageWindowRect);
-            }
-
-            // Prevent click-through to the game world when GUI is active.
-            if ((showGUI && windowRect.Contains(Event.current.mousePosition)) || (showStorageGUI && storageWindowRect.Contains(Event.current.mousePosition)))
-            {
-                Input.ResetInputAxes();
-            }
-        }
-
-        /// <summary>
-        /// Draws a border around the given rectangle using the borderTexture.
-        /// </summary>
-        private void DrawWindowBorder(Rect rect)
-        {
-            GUI.DrawTexture(new Rect(rect.x, rect.y, rect.width, 1), borderTexture); // Top
-            GUI.DrawTexture(new Rect(rect.x, rect.y + rect.height - 1, rect.width, 1), borderTexture); // Bottom
-            GUI.DrawTexture(new Rect(rect.x, rect.y, 1, rect.height), borderTexture); // Left
-            GUI.DrawTexture(new Rect(rect.x + rect.width - 1, rect.y, 1, rect.height), borderTexture); // Right
         }
 
         #endregion
@@ -551,166 +410,7 @@ namespace NexusLogistics
 
         #endregion
 
-        #region GUI Methods
-
-        void WindowFunction(int windowID)
-        {
-            string[] panels = { "Main Options", "Items", "Combat" };
-            selectedPanel = GUILayout.Toolbar(selectedPanel, panels, toolbarStyle);
-            switch (selectedPanel)
-            {
-                case 0: MainPanel(); break;
-                case 1: ItemPanel(); break;
-                case 2: FightPanel(); break;
-            }
-            GUI.DragWindow();
-        }
-
-        void StorageWindowFunction(int windowID)
-        {
-            string[] categories = { "Dashboard", "Raw", "Intermeds", "Buildings", "Combat", "Science" };
-            selectedStorageCategory = (StorageCategory)GUILayout.Toolbar((int)selectedStorageCategory, categories, toolbarStyle);
-
-            if (selectedStorageCategory == StorageCategory.Dashboard)
-            {
-                DashboardPanel();
-            }
-            else
-            {
-                GUILayout.BeginVertical();
-                GUILayout.Space(5);
-
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("Item Name", labelStyle, GUILayout.Width(150));
-            GUILayout.Label("Count", labelStyle, GUILayout.Width(100));
-            GUILayout.Label("Proliferation", labelStyle, GUILayout.Width(100));
-            GUILayout.Label("Limit", labelStyle, GUILayout.Width(100));
-            GUILayout.EndHorizontal();
-
-            storageScrollPosition = GUILayout.BeginScrollView(storageScrollPosition, scrollViewStyle);
-
-            var originalContentColor = GUI.contentColor;
-            try
-            {
-                // Use the cached list for display to avoid locking during GUI rendering.
-                foreach (var pair in storageItemsForGUI)
-                {
-                    int itemId = pair.Key;
-                    RemoteStorageItem item = pair.Value;
-                    ItemProto itemProto = LDB.items.Select(itemId);
-                    string itemName = itemProto.name;
-
-                    if (!limitInputStrings.ContainsKey(itemId))
-                    {
-                        limitInputStrings[itemId] = item.limit.ToString();
-                    }
-
-                    GUILayout.BeginHorizontal();
-                    GUILayout.Label(itemName, labelStyle, GUILayout.Width(150));
-                    GUILayout.Label(item.count.ToString("N0"), labelStyle, GUILayout.Width(100));
-
-                    var (prolifText, prolifColor) = GetProliferationStatus(item.count, item.inc, itemId);
-                    GUI.contentColor = prolifColor;
-                    GUILayout.Label(prolifText, labelStyle, GUILayout.Width(100));
-                    GUI.contentColor = originalContentColor;
-
-                    string currentInput = limitInputStrings[itemId];
-                    string newInput = GUILayout.TextField(currentInput, textFieldStyle, GUILayout.Width(100));
-
-                    if (newInput != currentInput)
-                    {
-                        limitInputStrings[itemId] = newInput;
-                        if (int.TryParse(newInput, out int newLimit) && newLimit >= 0)
-                        {
-                            lock (remoteStorageLock)
-                            {
-                                if (remoteStorage.ContainsKey(itemId))
-                                {
-                                    remoteStorage[itemId].limit = newLimit;
-                                }
-                            }
-                        }
-                    }
-                    GUILayout.EndHorizontal();
-                }
-            }
-            catch (Exception e)
-            {
-                GUI.contentColor = originalContentColor;
-                GUILayout.Label("Error displaying storage: " + e.Message);
-            }
-            finally
-            {
-                GUI.contentColor = originalContentColor;
-            }
-
-            GUILayout.EndScrollView();
-            GUILayout.EndVertical();
-            }
-            GUI.DragWindow();
-        }
-
-        void DashboardPanel()
-        {
-            storageScrollPosition = GUILayout.BeginScrollView(storageScrollPosition, scrollViewStyle);
-            GUILayout.BeginVertical();
-
-            // Bottlenecks Section
-            GUILayout.Label("Bottlenecks", windowStyle);
-            if (cachedBottlenecks.Any())
-            {
-                foreach (var bottleneck in cachedBottlenecks)
-                {
-                    string itemName = LDB.items.Select(bottleneck.ItemId).name;
-                    string deficitText = $"{Math.Abs(bottleneck.DeficitPerMinute)}/min deficit";
-
-                    string etaText = "";
-                    if (bottleneck.DeficitPerMinute < 0)
-                    {
-                        double minutesToDepletion = (double)bottleneck.CurrentStock / Math.Abs(bottleneck.DeficitPerMinute);
-                        etaText = $" (ETA: {FormatDuration(minutesToDepletion)})";
-                    }
-
-                    GUILayout.Label($"{itemName}: {deficitText}{etaText}", labelStyle);
-                }
-            }
-            else
-            {
-                GUILayout.Label("No potential bottlenecks detected.", labelStyle);
-            }
-
-            GUILayout.EndVertical();
-            GUILayout.EndScrollView();
-        }
-
         #region Dashboard Calculations
-
-        private string FormatDuration(double minutes)
-        {
-            if (double.IsInfinity(minutes) || minutes > 60 * 24 * 30) // Cap at 30 days for readability
-            {
-                return ">30d";
-            }
-            if (minutes < 1)
-            {
-                return "<1m";
-            }
-            if (minutes < 60)
-            {
-                return $"{minutes:F0}m";
-            }
-
-            double hours = minutes / 60.0;
-            if (hours < 24)
-            {
-                int h = (int)hours;
-                int m = (int)Math.Round((hours - h) * 60);
-                return $"{h}h{m:D2}m";
-            }
-
-            double days = hours / 24.0;
-            return $"{days:F1}d";
-        }
 
         private List<BottleneckInfo> GetPotentialBottlenecks()
         {
@@ -750,72 +450,6 @@ namespace NexusLogistics
                 }
             }
             return bottlenecks.OrderBy(b => b.DeficitPerMinute).ToList();
-        }
-
-        #endregion
-
-        void MainPanel()
-        {
-            mainPanelScrollPosition = GUILayout.BeginScrollView(mainPanelScrollPosition, false, true, GUI.skin.horizontalScrollbar, GUI.skin.verticalScrollbar, scrollViewStyle);
-            GUILayout.BeginVertical();
-            GUILayout.Space(10);
-            enableMod.Value = GUILayout.Toggle(enableMod.Value, "Enable MOD", toggleStyle);
-            autoReplenishPackage.Value = GUILayout.Toggle(autoReplenishPackage.Value, "Auto Replenish Filtered Items", toggleStyle);
-            autoCleanInventory.Value = GUILayout.Toggle(autoCleanInventory.Value, "Auto Clean Inventory to Logistic Slots", toggleStyle);
-
-            GUILayout.Space(15);
-            GUILayout.BeginHorizontal();
-            autoSpray.Value = GUILayout.Toggle(autoSpray.Value, "Auto Spray", toggleStyle);
-            if (autoSpray.Value)
-            {
-                costProliferator.Value = GUILayout.Toggle(costProliferator.Value, "Consume Proliferator", toggleStyle);
-            }
-            GUILayout.EndHorizontal();
-
-            if (autoSpray.Value)
-            {
-                GUILayout.BeginHorizontal();
-                GUILayout.Label("Proliferator Tier:", labelStyle, GUILayout.Width(120));
-                proliferatorSelection.Value = (ProliferatorSelection)GUILayout.Toolbar((int)proliferatorSelection.Value, new string[] { "All", "MK.I", "MK.II", "MK.III" }, toolbarStyle);
-                GUILayout.EndHorizontal();
-            }
-
-            GUILayout.Space(15);
-            useStorege.Value = GUILayout.Toggle(useStorege.Value, "Recover from storage boxes/tanks", toggleStyle);
-
-            GUILayout.Space(15);
-            autoReplenishTPPFuel.Value = GUILayout.Toggle(autoReplenishTPPFuel.Value, "Auto-refuel Thermal Power Plants", toggleStyle);
-            if (autoReplenishTPPFuel.Value)
-            {
-                selectedFuelIndex = GUILayout.SelectionGrid(selectedFuelIndex, fuelOptions.Values.ToArray(), 3, toggleStyle);
-                fuelId.Value = fuelOptions.Keys.ToArray()[selectedFuelIndex];
-            }
-
-            GUILayout.EndVertical();
-            GUILayout.EndScrollView();
-        }
-
-        void ItemPanel()
-        {
-            GUILayout.BeginVertical();
-            infBuildings.Value = GUILayout.Toggle(infBuildings.Value, "Infinite Buildings", toggleStyle);
-            infVeins.Value = GUILayout.Toggle(infVeins.Value, "Infinite Minerals", toggleStyle);
-            infItems.Value = GUILayout.Toggle(infItems.Value, "Infinite Items (Disables Achievements)", toggleStyle);
-            infSand.Value = GUILayout.Toggle(infSand.Value, "Infinite Soil Pile", toggleStyle);
-            GUILayout.EndVertical();
-        }
-
-        void FightPanel()
-        {
-            GUILayout.BeginVertical();
-            infAmmo.Value = GUILayout.Toggle(infAmmo.Value, "Infinite Ammo", toggleStyle);
-            infFleet.Value = GUILayout.Toggle(infFleet.Value, "Infinite Fleet", toggleStyle);
-            GUILayout.Space(15);
-            if (GUILayout.Button(new GUIContent("Clear Banned Items from Battle Bases", "Removes items from Battlefield Analysis Bases that you have marked not to be picked up."), buttonStyle, GUILayout.ExpandWidth(true)))
-            {
-                ClearBattleBaseBannedItems();
-            }
-            GUILayout.EndVertical();
         }
 
         #endregion
@@ -1605,7 +1239,7 @@ namespace NexusLogistics
             return (int)Math.Round(incPerCount * expectCount);
         }
 
-        bool IsVein(int itemId)
+        static bool IsVein(int itemId)
         {
             int[] items = { ItemIds.Water, ItemIds.SulfuricAcid, ItemIds.Hydrogen, ItemIds.Deuterium };
             return items.Contains(itemId) || LDB.veins.GetVeinTypeByItemId(itemId) != EVeinType.None;
@@ -1690,7 +1324,30 @@ namespace NexusLogistics
             else if (GameMain.history.TechUnlocked(3509)) GameMain.history.remoteStationExtraStorage = 15000;
         }
 
-        private StorageCategory GetItemCategory(ItemProto itemProto)
+        public static void SetItemLimit(int itemId, int newLimit)
+        {
+            lock (remoteStorageLock)
+            {
+                if (remoteStorage.ContainsKey(itemId))
+                {
+                    remoteStorage[itemId].limit = newLimit;
+                }
+            }
+        }
+
+        public static int GetItemLimit(int itemId)
+        {
+            lock (remoteStorageLock)
+            {
+                if (remoteStorage.ContainsKey(itemId))
+                {
+                    return remoteStorage[itemId].limit;
+                }
+            }
+            return 0; // Or a default value
+        }
+
+        public static StorageCategory GetItemCategory(ItemProto itemProto)
         {
             if (itemProto == null) return StorageCategory.IntermediateProducts;
             if (itemProto.ID >= 6001 && itemProto.ID <= 6006) return StorageCategory.ScienceMatrices;
@@ -1700,7 +1357,7 @@ namespace NexusLogistics
             return StorageCategory.IntermediateProducts;
         }
 
-        private (string text, Color color) GetProliferationStatus(int count, int inc, int itemId)
+        public static (string text, Color color) GetProliferationStatus(int count, int inc, int itemId)
         {
             var tiers = new[] {
                 new { Name = "Mk 3", MinPoints = 4.0, Color = new Color(0.6f, 0.7f, 1f) },
@@ -1736,7 +1393,7 @@ namespace NexusLogistics
             return ("None", Color.grey);
         }
 
-        private void RefreshStorageItemsForGUI()
+        public static void RefreshStorageItemsForGUI(StorageCategory category)
         {
             lock (remoteStorageLock)
             {
@@ -1745,19 +1402,38 @@ namespace NexusLogistics
                     {
                         if (pair.Value.count <= 0) return false;
                         ItemProto itemProto = LDB.items.Select(pair.Key);
-                        return itemProto != null && GetItemCategory(itemProto) == selectedStorageCategory;
+                        return itemProto != null && GetItemCategory(itemProto) == category;
                     })
                     .OrderBy(item => LDB.items.Select(item.Key)?.name ?? string.Empty)
                     .ToList();
             }
+        }
 
-            foreach (var pair in storageItemsForGUI)
+        public static string FormatDuration(double minutes)
+        {
+            if (double.IsInfinity(minutes) || minutes > 60 * 24 * 30) // Cap at 30 days for readability
             {
-                if (!limitInputStrings.ContainsKey(pair.Key))
-                {
-                    limitInputStrings[pair.Key] = pair.Value.limit.ToString();
-                }
+                return ">30d";
             }
+            if (minutes < 1)
+            {
+                return "<1m";
+            }
+            if (minutes < 60)
+            {
+                return $"{minutes:F0}m";
+            }
+
+            double hours = minutes / 60.0;
+            if (hours < 24)
+            {
+                int h = (int)hours;
+                int m = (int)Math.Round((hours - h) * 60);
+                return $"{h}h{m:D2}m";
+            }
+
+            double days = hours / 24.0;
+            return $"{days:F1}d";
         }
 
         #endregion
