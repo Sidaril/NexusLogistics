@@ -319,7 +319,6 @@ namespace NexusLogistics
             fuelOptions.Add(ItemIds.CombustionUnit, "Combustion Unit");
             fuelOptions.Add(ItemIds.Wood, "Wood");
             fuelOptions.Add(ItemIds.PlantFuel, "Plant Fuel");
-            selectedFuelIndex = fuelOptions.Keys.ToList().FindIndex(id => id == fuelId.Value);
 
             proliferators.Add((ItemIds.ProliferatorMk3, 4));
             proliferators.Add((ItemIds.ProliferatorMk2, 2));

@@ -104,7 +104,7 @@
     <Compile Include="UI\IModWindow.cs" />
     <Compile Include="UI\RecyclingListView.cs" />
     <Compile Include="UI\UICheckBox.cs" />
-    <Compile Include="UI\UIListView.cs" />
+    <Compile Include="UI\MyUIListView.cs" />
     <Compile Include="UI\UIUtil.cs" />
     <Compile Include="UI\UIWindowControl.cs" />
     <Compile Include="UINexusMainWindow.cs" />

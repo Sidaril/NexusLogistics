@@ -1,18 +1,17 @@
 using System;
 using UnityEngine.UI;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace NexusLogistics.UI
 {
-    public class UIListView : MonoBehaviour
+    public class MyUIListView : MonoBehaviour
     {
         public RecyclingListView recyclingListView;
         public ScrollRect m_ScrollRect;
 
-        public static UIListView Create(MonoBehaviour preFab, RecyclingListView.ItemDelegate dlgt, string goName = "", Transform parent = null, float vsWidth = 16f)
+        public static MyUIListView Create(MonoBehaviour preFab, RecyclingListView.ItemDelegate dlgt, string goName = "", Transform parent = null, float vsWidth = 16f)
         {
-            UIListView result;
+            MyUIListView result;
             UIListView uiListView;
             UIListView src = UIRoot.instance.uiGame.tutorialWindow.entryList;
             GameObject go = GameObject.Instantiate(src.gameObject);
@@ -26,9 +25,9 @@ namespace NexusLogistics.UI
             }
 
             uiListView = go.GetComponent<UIListView>();
-            GameObject contentGo = uiListView.m_ContentPanel.gameObject;
+            GameObject contentGo = uiListView.m_ScrollRect.content.gameObject;
 
-            result = go.AddComponent<UIListView>();
+            result = go.AddComponent<MyUIListView>();
             result.recyclingListView = contentGo.AddComponent<RecyclingListView>();
 
             // Make a prefab out of this child panel
@@ -56,7 +55,6 @@ namespace NexusLogistics.UI
 
             RectTransform vsRect = result.recyclingListView.scrollRect.verticalScrollbar.transform as RectTransform;
             vsRect.sizeDelta = new Vector2(vsWidth, vsRect.sizeDelta.y);
-            Destroy(uiListView.m_ContentPanel);
             Destroy(uiListView);
 
             return result;

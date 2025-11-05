@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Linq;
 using BepInEx;
 using UnityEngine;
-using UnityEngine.UI;
 using NexusLogistics.UI; // Import the new UI utilities
 using UnityEngine.UI;
 
@@ -16,7 +15,7 @@ namespace NexusLogistics
 
         // UI Elements
         private List<UIButton> categoryButtons = new List<UIButton>();
-        private UIListView storageListView;
+        private MyUIListView storageListView;
         private RectTransform dashboardPanel;
         private Text dashboardBottleneckText;
 
@@ -77,7 +76,7 @@ namespace NexusLogistics
             bg.color = new Color(0f, 0f, 0f, 0.56f);
             UIUtil.NormalizeRectWithMargin(bg, 30f, 36f, 10f, 20f, contentTrans);
 
-            storageListView = UIListView.Create(UINexusStorageItem.CreatePrefab(), PopulateItem, "storage-list-view", bg.transform);
+            storageListView = MyUIListView.Create(UINexusStorageItem.CreatePrefab(), PopulateItem, "storage-list-view", bg.transform);
             UIUtil.NormalizeRectWithMargin(storageListView.transform, 0f, 0f, 0f, 0f, bg.transform);
             storageListView.m_ScrollRect.scrollSensitivity = 28f;
             storageListView.gameObject.SetActive(false); // Inactive by default

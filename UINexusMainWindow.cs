@@ -1,6 +1,5 @@
 using BepInEx;
 using UnityEngine;
-using UnityEngine.UI;
 using NexusLogistics.UI; // Import the new UI utilities
 using BepInEx.Configuration; // Needed for ConfigEntry
 using UnityEngine.UI;
@@ -45,11 +44,11 @@ namespace NexusLogistics
             int fuelColumnCount = 3;
 
             // Helper function to add elements
-            void AddElement(RectTransform rect, float new_x, float new_y)
+            void AddElement(RectTransform element, float new_x, float new_y)
             {
-                if (rect != null)
+                if (element != null)
                 {
-                    UIUtil.NormalizeRectWithTopLeft(rect, new_x, new_y, windowTrans);
+                    UIUtil.NormalizeRectWithTopLeft(element, new_x, new_y, windowTrans);
                 }
             }
 

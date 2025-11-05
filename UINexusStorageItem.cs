@@ -1,7 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
 using NexusLogistics.UI; // Import the new UI utilities
-using UnityEngine.UI;
 
 namespace NexusLogistics
 {
@@ -69,7 +68,7 @@ namespace NexusLogistics
             item.limitInput.textComponent.alignment = TextAnchor.MiddleRight;
 
             // Clean up the cloned prefab
-            Destroy(src.iconHide.gameObject);
+            Destroy(src.iconHide);
             Destroy(src.iconButton.gameObject);
             src.iconImage = null;
             src.labelText = null;
