@@ -98,8 +98,8 @@ namespace NexusLogistics
 
         private const int SAVE_VERSION = 2;
 
-        private enum ProliferatorSelection { All, Mk1, Mk2, Mk3 }
-        private enum StorageCategory { Dashboard, RawResources, IntermediateProducts, BuildingsAndVehicles, AmmunitionAndCombat, ScienceMatrices }
+        public enum ProliferatorSelection { All, Mk1, Mk2, Mk3 }
+        public enum StorageCategory { Dashboard, RawResources, IntermediateProducts, BuildingsAndVehicles, AmmunitionAndCombat, ScienceMatrices }
 
         // Remote Storage Data
         private static readonly Dictionary<int, RemoteStorageItem> remoteStorage = new Dictionary<int, RemoteStorageItem>();
@@ -121,7 +121,7 @@ namespace NexusLogistics
         public static List<KeyValuePair<int, RemoteStorageItem>> storageItemsForGUI = new List<KeyValuePair<int, RemoteStorageItem>>();
 
         // Dashboard Data Cache
-        private struct BottleneckInfo
+        public struct BottleneckInfo
         {
             public int ItemId;
             public int DeficitPerMinute;
@@ -136,7 +136,7 @@ namespace NexusLogistics
         #endregion
 
         #region Embedded Classes
-        private class RemoteStorageItem
+        public class RemoteStorageItem
         {
             public int count;
             public int inc;
