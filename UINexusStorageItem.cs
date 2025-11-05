@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using NexusLogistics.UI; // Import the new UI utilities
+using UnityEngine.UI;
 
 namespace NexusLogistics
 {

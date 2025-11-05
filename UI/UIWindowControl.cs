@@ -2,6 +2,7 @@ using HarmonyLib;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.UI;
 
 namespace NexusLogistics.UI
 {

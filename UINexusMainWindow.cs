@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using NexusLogistics.UI; // Import the new UI utilities
 using BepInEx.Configuration; // Needed for ConfigEntry
+using UnityEngine.UI;
 using System.Collections.Generic; // Needed for List
 
 namespace NexusLogistics
@@ -30,7 +31,7 @@ namespace NexusLogistics
         public void TryClose() { _Close(); }
         public bool isFunctionWindow() { return true; }
 
-        public override void _OnCreate()
+        protected override void _OnCreate()
         {
             windowTrans = UIWindowControl.GetRectTransform(this);
             // Increased height slightly for the two new toggles
@@ -160,16 +161,16 @@ namespace NexusLogistics
             AddElement(rect, x_, y_); y_ += 26f;
         }
 
-        public override bool _OnInit()
+        protected override bool _OnInit()
         {
             windowTrans.anchoredPosition = new Vector2(300, -400); // Set initial position
             return true;
         }
 
-        public override void _OnFree() { }
-        public override void _OnDestroy() { instance = null; }
+        protected override void _OnFree() { }
+        protected override void _OnDestroy() { instance = null; }
 
-        public override void _OnRegEvent()
+        protected override void _OnRegEvent()
         {
             // Add listeners for our buttons
             foreach (var btn in proliferatorButtons)
@@ -181,7 +182,7 @@ namespace NexusLogistics
                 btn.onClick += OnFuelButtonClick;
             }
         }
-        public override void _OnUnregEvent()
+        protected override void _OnUnregEvent()
         {
             // Remove listeners to prevent errors
             foreach (var btn in proliferatorButtons)
@@ -194,16 +195,16 @@ namespace NexusLogistics
             }
         }
 
-        public override void _OnOpen()
+        protected override void _OnOpen()
         {
             // Refresh button states every time window is opened
             RefreshProliferatorButtons();
             RefreshFuelButtons();
         }
 
-        public override void _OnClose() { }
+        protected override void _OnClose() { }
 
-        public override void _OnUpdate()
+        protected override void _OnUpdate()
         {
             if (VFInput.escape && !VFInput.inputing)
             {

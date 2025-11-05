@@ -4,6 +4,7 @@ using BepInEx;
 using UnityEngine;
 using UnityEngine.UI;
 using NexusLogistics.UI; // Import the new UI utilities
+using UnityEngine.UI;
 
 namespace NexusLogistics
 {
@@ -20,7 +21,7 @@ namespace NexusLogistics
         private Text dashboardBottleneckText;
 
         // State
-        public StorageCategory selectedStorageCategory = StorageCategory.Dashboard;
+        public NexusLogistics.StorageCategory selectedStorageCategory = NexusLogistics.StorageCategory.Dashboard;
         public Dictionary<int, string> limitInputStrings = new Dictionary<int, string>();
         private float refreshTimer = 0f;
 
@@ -33,7 +34,7 @@ namespace NexusLogistics
         public void TryClose() { _Close(); }
         public bool isFunctionWindow() { return true; }
 
-        public override void _OnCreate()
+        protected override void _OnCreate()
         {
             windowTrans = UIWindowControl.GetRectTransform(this);
             windowTrans.sizeDelta = new Vector2(600, 500);
@@ -51,7 +52,7 @@ namespace NexusLogistics
             string[] categories = { "Dashboard", "Raw", "Intermeds", "Buildings", "Combat", "Science" };
             foreach (var categoryName in categories)
             {
-                StorageCategory category = (StorageCategory)System.Enum.Parse(typeof(StorageCategory), categoryName.Replace("Intermeds", "IntermediateProducts"));
+                NexusLogistics.StorageCategory category = (NexusLogistics.StorageCategory)System.Enum.Parse(typeof(NexusLogistics.StorageCategory), categoryName.Replace("Intermeds", "IntermediateProducts"));
 
                 UIButton btn = UIUtil.MakeHiliteTextButton(categoryName, 80f, 24f);
                 btn.data = (int)category;
@@ -88,23 +89,23 @@ namespace NexusLogistics
             (item as UINexusStorageItem).Refresh(rowIndex);
         }
 
-        public override bool _OnInit()
+        protected override bool _OnInit()
         {
             windowTrans.anchoredPosition = new Vector2(-200, -400); // Set initial position
             return true;
         }
 
-        public override void _OnFree() { }
-        public override void _OnDestroy() { instance = null; }
+        protected override void _OnFree() { }
+        protected override void _OnDestroy() { instance = null; }
 
-        public override void _OnRegEvent()
+        protected override void _OnRegEvent()
         {
             foreach (var btn in categoryButtons)
             {
                 btn.onClick += OnCategoryButtonClick;
             }
         }
-        public override void _OnUnregEvent()
+        protected override void _OnUnregEvent()
         {
             foreach (var btn in categoryButtons)
             {
@@ -112,16 +113,16 @@ namespace NexusLogistics
             }
         }
 
-        public override void _OnOpen()
+        protected override void _OnOpen()
         {
             limitInputStrings.Clear(); // Clear cache
             RefreshCategoryButtons();
             RefreshPanel();
         }
 
-        public override void _OnClose() { }
+        protected override void _OnClose() { }
 
-        public override void _OnUpdate()
+        protected override void _OnUpdate()
         {
             if (VFInput.escape && !VFInput.inputing)
             {
@@ -140,7 +141,7 @@ namespace NexusLogistics
 
         private void OnCategoryButtonClick(int data)
         {
-            selectedStorageCategory = (StorageCategory)data;
+            selectedStorageCategory = (NexusLogistics.StorageCategory)data;
             RefreshCategoryButtons();
             RefreshPanel();
         }
@@ -155,7 +156,7 @@ namespace NexusLogistics
 
         private void RefreshPanel()
         {
-            if (selectedStorageCategory == StorageCategory.Dashboard)
+            if (selectedStorageCategory == NexusLogistics.StorageCategory.Dashboard)
             {
                 // Show dashboard, hide list
                 dashboardPanel.gameObject.SetActive(true);

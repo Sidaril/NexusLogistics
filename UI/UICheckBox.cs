@@ -1,6 +1,7 @@
 using BepInEx.Configuration;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.UI;
 
 namespace NexusLogistics.UI
 {
