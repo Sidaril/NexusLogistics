@@ -38,9 +38,22 @@ namespace NexusLogistics
             windowTrans = UIWindowControl.GetRectTransform(this);
             windowTrans.sizeDelta = new Vector2(600, 500);
 
+            // --- CHANGED ---
+            // Find the panel-bg to parent new UI elements to
+            RectTransform panelBg = windowTrans.Find("panel-bg") as RectTransform;
+            if (panelBg == null)
+            {
+                Logger.LogError("NexusLogistics: Could not find 'panel-bg' in UINexusStorageWindow!");
+                return;
+            }
+            // --- END CHANGED ---
+
             // Create a content area
             contentTrans = UIUtil.CreateGameObject<RectTransform>("content", 600, 440);
-            UIUtil.NormalizeRectWithTopLeft(contentTrans, 0, 60, windowTrans);
+            // --- CHANGED ---
+            // Parent it to panelBg, offset from its top-left for the title bar
+            UIUtil.NormalizeRectWithTopLeft(contentTrans, 0, 60, panelBg);
+            // --- END CHANGED ---
 
             // --- Create Category Tabs ---
             float x_toolbar = 36f;

@@ -20,7 +20,9 @@ namespace NexusLogistics.UI
             GameObject.Destroy(go.GetComponent<UIInserterWindow>());
             ManualBehaviour win = go.AddComponent<T>();
 
-            for (int i = 0; i < go.transform.childCount; i++)
+            // --- CHANGED BLOCK START ---
+            // Iterate backwards when destroying children to avoid index issues
+            for (int i = go.transform.childCount - 1; i >= 0; i--)
             {
                 GameObject child = go.transform.GetChild(i).gameObject;
                 if (child.name == "panel-bg")
@@ -41,9 +43,12 @@ namespace NexusLogistics.UI
                 }
                 else
                 {
+                    // Destroy all other children that are not the panel-bg
                     GameObject.Destroy(child);
                 }
             }
+            // --- CHANGED BLOCK END ---
+
             allWindows.Add(win as IModWindow);
             return win as T;
         }
@@ -80,7 +85,7 @@ namespace NexusLogistics.UI
             }
 
             [HarmonyPostfix]
-            [HarmonyPatch(typeof(UIGame), "Update")]
+            [HarmonyPatch(typeof(UIGame), "_OnUpdate")]
             public static void UIGame_Update_Postfix()
             {
                 if (VFInput.escape && !VFInput.inputing)

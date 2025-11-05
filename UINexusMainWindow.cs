@@ -36,6 +36,16 @@ namespace NexusLogistics
             // Increased height slightly for the two new toggles
             windowTrans.sizeDelta = new Vector2(480, 550);
 
+            // --- CHANGED ---
+            // Find the panel-bg to parent new UI elements to
+            RectTransform panelBg = windowTrans.Find("panel-bg") as RectTransform;
+            if (panelBg == null)
+            {
+                Logger.LogError("NexusLogistics: Could not find 'panel-bg' in UINexusMainWindow!");
+                return;
+            }
+            // --- END CHANGED ---
+
             float y_ = 60f;
             float x_ = 36f;
             float padding = 4f; // Padding between buttons
@@ -48,7 +58,10 @@ namespace NexusLogistics
             {
                 if (element != null)
                 {
-                    UIUtil.NormalizeRectWithTopLeft(element, new_x, new_y, windowTrans);
+                    // --- CHANGED ---
+                    // Parent to panelBg, not windowTrans
+                    UIUtil.NormalizeRectWithTopLeft(element, new_x, new_y, panelBg);
+                    // --- END CHANGED ---
                 }
             }
 
