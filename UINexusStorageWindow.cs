@@ -98,6 +98,14 @@ namespace NexusLogistics
 
             // Create the list view inside the container, telling it to fill the container
             storageListView = MyUIListView.Create("nexus-storage-list", 0, 0, listViewContainer, this);
+
+            // FIX: Make the list view fill its container to resolve horizontal alignment issues
+            RectTransform rclv = storageListView.GetComponent<RectTransform>();
+            rclv.anchorMin = Vector2.zero; // Stretch from bottom-left
+            rclv.anchorMax = Vector2.one;  // Stretch to top-right
+            rclv.sizeDelta = Vector2.zero; // No size offset
+            rclv.anchoredPosition = Vector2.zero; // Centered
+
             storageListView.gameObject.SetActive(false); // Inactive by default
         }
 
