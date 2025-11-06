@@ -57,7 +57,6 @@ namespace NexusLogistics.UI
             }
             
             // Destroy the original components we no longer need
-            GameObject.Destroy(originalListView.m_ContentPanel);
             GameObject.Destroy(originalListView);
 
             // Set size
