@@ -42,7 +42,6 @@ namespace NexusLogistics.UI
             contentRect.anchorMin = new Vector2(0, 1);
             contentRect.anchorMax = new Vector2(0, 1);
             contentRect.pivot = new Vector2(0, 1);
-            contentRect.anchoredPosition = Vector2.zero; // <-- THE CRITICAL FIX
             result.recyclingListView.scrollRect = result.m_ScrollRect;
 
             // Configure the new list view

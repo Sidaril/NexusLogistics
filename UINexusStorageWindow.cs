@@ -99,6 +99,10 @@ namespace NexusLogistics
             // Create the list view inside the container, telling it to fill the container
             storageListView = MyUIListView.Create("nexus-storage-list", 0, 0, listViewContainer, this);
 
+            // --- THE REAL FIX ---
+            // The entire list view object is offset, not its content. Reset its position.
+            (storageListView.transform as RectTransform).anchoredPosition = Vector2.zero;
+
             storageListView.gameObject.SetActive(false); // Inactive by default
         }
 
