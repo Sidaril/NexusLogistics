@@ -99,5 +99,60 @@ namespace NexusLogistics.UI
             }
             return btn;
         }
+
+        // --- New methods to support robust prefab creation ---
+
+        public static Image CreateImage(string name, Transform parent)
+        {
+            GameObject go = new GameObject(name, typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(parent, false);
+            return go.GetComponent<Image>();
+        }
+
+        public static Text CreateText(string name, string initialText, int fontSize, Transform parent)
+        {
+            Text txt = CreateText(initialText, fontSize, name);
+            txt.transform.SetParent(parent, false);
+            return txt;
+        }
+
+        public static InputField CreateInputField(string name, string placeholder, int fontSize, Transform parent)
+        {
+            // Clone a reliable InputField from the game
+            UIStationWindow stationWindow = UIRoot.instance.uiGame.stationWindow;
+            InputField input = GameObject.Instantiate<InputField>(stationWindow.nameInput);
+            input.gameObject.name = name;
+            input.transform.SetParent(parent, false);
+
+            // Remove extra components we don't need
+            Object.Destroy(input.GetComponent<UIButton>());
+
+            // Configure background image
+            input.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.05f);
+
+            // Configure text component
+            Text textComponent = input.textComponent;
+            textComponent.fontSize = fontSize;
+            textComponent.alignment = TextAnchor.MiddleLeft;
+            textComponent.color = Color.white;
+
+            // Configure placeholder text
+            Text placeholderComponent = input.placeholder as Text;
+            if (placeholderComponent != null)
+            {
+                placeholderComponent.text = placeholder;
+                placeholderComponent.fontSize = fontSize;
+                placeholderComponent.color = new Color(1f, 1f, 1f, 0.4f);
+            }
+
+            return input;
+        }
+
+        public static RectTransform NormalizeRectWithTopLeft(Component cmp, float left, float top, float width, float height)
+        {
+            RectTransform rect = NormalizeRectWithTopLeft(cmp, left, top);
+            rect.sizeDelta = new Vector2(width, height);
+            return rect;
+        }
     }
 }

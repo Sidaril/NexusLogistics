@@ -26,8 +26,17 @@ namespace NexusLogistics
 
         public static void CreateInstance()
         {
-            if (instance != null) return;
+            NexusLogistics.Log.LogInfo("UINexusStorageWindow.CreateInstance called.");
+            if (instance != null)
+            {
+                NexusLogistics.Log.LogInfo("Instance already exists.");
+                return;
+            }
             instance = UIWindowControl.CreateWindow<UINexusStorageWindow>("NexusStorageWindow", "Remote Storage");
+            if (instance == null)
+            {
+                NexusLogistics.Log.LogError("UIWindowControl.CreateWindow returned null for UINexusStorageWindow!");
+            }
         }
 
         public void TryClose() { _Close(); }
@@ -49,12 +58,9 @@ namespace NexusLogistics
             }
             // --- END CHANGED ---
 
-            // Create a content area
-            contentTrans = UIUtil.CreateGameObject<RectTransform>("content", 600, 440);
-            // --- CHANGED ---
-            // Parent it to panelBg, offset from its top-left for the title bar
-            UIUtil.NormalizeRectWithTopLeft(contentTrans, 0, 60, panelBg);
-            // --- END CHANGED ---
+            // Create a content area that fills the panel below the title
+            contentTrans = UIUtil.CreateGameObject<RectTransform>("content");
+            UIUtil.NormalizeRectWithMargin(contentTrans, 60f, 0f, 0f, 0f, panelBg);
 
             // --- Create Category Tabs ---
             float x_toolbar = 36f;
@@ -77,7 +83,7 @@ namespace NexusLogistics
 
             // --- Create Dashboard Panel ---
             dashboardPanel = UIUtil.CreateGameObject<RectTransform>("dashboard-panel");
-            UIUtil.NormalizeRectWithMargin(dashboardPanel, 30f, 36f, 10f, 36f, contentTrans);
+            UIUtil.NormalizeRectWithMargin(dashboardPanel, 24f, 36f, 10f, 36f, contentTrans);
             dashboardPanel.gameObject.SetActive(true); // Active by default
 
             dashboardBottleneckText = UIUtil.CreateText("Loading dashboard...", 14);
@@ -86,13 +92,12 @@ namespace NexusLogistics
             dashboardBottleneckText.alignment = TextAnchor.UpperLeft;
 
             // --- Create List View Panel ---
-            Image bg = UIUtil.CreateGameObject<Image>("list-bg", 100f, 100f);
-            bg.color = new Color(0f, 0f, 0f, 0.56f);
-            UIUtil.NormalizeRectWithMargin(bg, 30f, 36f, 10f, 20f, contentTrans);
+            // Create a container for the list view and position it exactly like the dashboard panel
+            RectTransform listViewContainer = UIUtil.CreateGameObject<RectTransform>("list-view-container");
+            UIUtil.NormalizeRectWithMargin(listViewContainer, 24f, 36f, 10f, 36f, contentTrans);
 
-            storageListView = MyUIListView.Create("nexus-storage-list", (int)bg.rectTransform.sizeDelta.x, (int)bg.rectTransform.sizeDelta.y, bg.rectTransform);
-            UIUtil.NormalizeRectWithMargin(storageListView.transform, 0f, 0f, 0f, 0f, bg.transform);
-            storageListView.m_ScrollRect.scrollSensitivity = 28f;
+            // Create the list view inside the container, telling it to fill the container
+            storageListView = MyUIListView.Create("nexus-storage-list", 0, 0, listViewContainer, this);
             storageListView.gameObject.SetActive(false); // Inactive by default
         }
 
@@ -179,23 +184,32 @@ namespace NexusLogistics
             if (selectedStorageCategory == NexusLogistics.StorageCategory.Dashboard)
             {
                 // Show dashboard, hide list
-                dashboardPanel.gameObject.SetActive(true);
-                storageListView.gameObject.SetActive(false);
+                if (dashboardPanel != null) dashboardPanel.gameObject.SetActive(true);
+                if (storageListView != null) storageListView.gameObject.SetActive(false);
                 RefreshDashboard();
             }
             else
             {
                 // Show list, hide dashboard
-                dashboardPanel.gameObject.SetActive(false);
-                storageListView.gameObject.SetActive(true);
-                RefreshList();
+                if (dashboardPanel != null) dashboardPanel.gameObject.SetActive(false);
+                if (storageListView != null)
+                {
+                    storageListView.gameObject.SetActive(true);
+                    RefreshList();
+                }
             }
         }
 
         private void RefreshList()
         {
+            if (storageListView == null) return; // Extra safety check
             NexusLogistics.RefreshStorageItemsForGUI(selectedStorageCategory);
             storageListView.SetItemCount(NexusLogistics.storageItemsForGUI.Count);
+            // Reset scroll position by setting the content panel's local position
+            if (storageListView.recyclingListView != null)
+            {
+                storageListView.recyclingListView.transform.localPosition = Vector3.zero;
+            }
         }
 
         private void RefreshDashboard()

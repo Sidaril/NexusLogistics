@@ -23,8 +23,17 @@ namespace NexusLogistics
 
         public static void CreateInstance()
         {
-            if (instance != null) return;
+            NexusLogistics.Log.LogInfo("UINexusMainWindow.CreateInstance called.");
+            if (instance != null)
+            {
+                NexusLogistics.Log.LogInfo("Instance already exists.");
+                return;
+            }
             instance = UIWindowControl.CreateWindow<UINexusMainWindow>("NexusMainWindow", "Nexus Logistics Settings");
+            if (instance == null)
+            {
+                NexusLogistics.Log.LogError("UIWindowControl.CreateWindow returned null for UINexusMainWindow!");
+            }
         }
 
         public void TryClose() { _Close(); }

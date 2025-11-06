@@ -12,7 +12,14 @@ namespace NexusLogistics.UI
 
         public static T CreateWindow<T>(string name, string title) where T : ManualBehaviour, IModWindow
         {
+            NexusLogistics.Log.LogInfo($"Attempting to create window: {name} of type {typeof(T).Name}");
             var srcWin = UIRoot.instance.uiGame.inserterWindow;
+            if (srcWin == null)
+            {
+                NexusLogistics.Log.LogError("Source window (inserterWindow) is null! Cannot create new windows.");
+                return null;
+            }
+
             GameObject src = srcWin.gameObject;
             GameObject go = GameObject.Instantiate(src, srcWin.transform.parent);
             go.name = name;
@@ -20,6 +27,11 @@ namespace NexusLogistics.UI
             GameObject.Destroy(go.GetComponent<UIInserterWindow>());
             NexusLogistics.Log.LogInfo($"Adding component {typeof(T).Name} to {go.name}");
             ManualBehaviour win = go.AddComponent<T>();
+            if (win == null)
+            {
+                NexusLogistics.Log.LogError($"AddComponent<{typeof(T).Name}> returned null!");
+                return null;
+            }
             win._Create();
 
             // Iterate backwards when destroying children to avoid index issues
@@ -49,6 +61,7 @@ namespace NexusLogistics.UI
                 }
             }
             allWindows.Add(win as IModWindow);
+            NexusLogistics.Log.LogInfo($"Successfully created window: {name}");
             return win as T;
         }
 
@@ -59,46 +72,13 @@ namespace NexusLogistics.UI
 
         public static void OpenWindow(ManualBehaviour win)
         {
+            if (win == null)
+            {
+                NexusLogistics.Log.LogError("OpenWindow was called with a null window object!");
+                return;
+            }
             NexusLogistics.Log.LogInfo($"UIWindowControl.OpenWindow called for {win.name}");
             win._Open();
-        }
-
-        public static class Patch
-        {
-            [HarmonyPostfix]
-            [HarmonyPatch(typeof(UIGame), "_OnCreate")]
-            public static void UIGame__OnCreate_Postfix()
-            {
-                _inited = true;
-            }
-
-            [HarmonyPostfix]
-            [HarmonyPatch(typeof(UIGame), "_OnDestroy")]
-            public static void UIGame__OnDestroy_Postfix()
-            {
-                for (int i = 0; i < allWindows.Count; i++)
-                {
-                    allWindows[i].TryClose();
-                }
-                allWindows.Clear();
-                _inited = false;
-            }
-
-            [HarmonyPostfix]
-            [HarmonyPatch(typeof(UIGame), "_OnUpdate")]
-            public static void UIGame_Update_Postfix()
-            {
-                if (VFInput.escape && !VFInput.inputing)
-                {
-                    for (int i = 0; i < allWindows.Count; i++)
-                    {
-                        if (allWindows[i].isFunctionWindow())
-                        {
-                            allWindows[i].TryClose();
-                        }
-                    }
-                }
-            }
         }
     }
 }

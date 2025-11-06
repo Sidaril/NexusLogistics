@@ -196,6 +196,8 @@ namespace NexusLogistics
         /// <summary>
         /// Main entry point for the mod. Called by BepInEx upon game start.
         /// </summary>
+        private static bool uiInitialized = false;
+
         void Start()
         {
             Log = base.Logger;
@@ -203,10 +205,8 @@ namespace NexusLogistics
             InitializeData();
 
             // Add this line to patch the UI control methods
-            Harmony.CreateAndPatchAll(typeof(UIWindowControl.Patch));
             Harmony.CreateAndPatchAll(typeof(ManualBehaviour_Open_Patch));
             Harmony.CreateAndPatchAll(typeof(ManualBehaviour_Close_Patch));
-            Harmony.CreateAndPatchAll(typeof(NexusLogisticsPatch));
 
             // Start the main processing thread.
             new Thread(MainProcessingLoop)
@@ -215,27 +215,25 @@ namespace NexusLogistics
             }.Start();
         }
 
-        // Add this new inner class inside NexusLogistics.cs
-        [HarmonyPatch]
-        public static class NexusLogisticsPatch
-        {
-            [HarmonyPostfix, HarmonyPatch(typeof(UIGame), "_OnCreate")]
-            public static void UIGame__OnCreate_Postfix()
-            {
-                // This is the safest place to create your UI windows
-                UINexusMainWindow.CreateInstance();
-                UINexusStorageWindow.CreateInstance(); // Create your storage window here too
-            }
-        }
-
         void Update()
         {
+            // Lazy initialize the UI windows once the player is fully in-game and a reliable UI component is ready.
+            if (!uiInitialized && GameMain.localPlanet != null && UIRoot.instance?.uiGame?.tutorialWindow?.entryList != null)
+            {
+                NexusLogistics.Log.LogInfo("Game UI is ready. Initializing NexusLogistics windows...");
+                UINexusMainWindow.CreateInstance();
+                UINexusStorageWindow.CreateInstance();
+                uiInitialized = true;
+                NexusLogistics.Log.LogInfo("NexusLogistics windows initialized.");
+            }
+
+
             if (hotKey.Value.IsDown())
             {
                 NexusLogistics.Log.LogInfo($"Main hotkey pressed. isMainWindowOpen: {isMainWindowOpen}");
                 if (isMainWindowOpen)
                 {
-                    UINexusMainWindow.instance._Close();
+                    UINexusMainWindow.instance?._Close();
                 }
                 else
                 {
@@ -248,7 +246,7 @@ namespace NexusLogistics
                 NexusLogistics.Log.LogInfo($"Storage hotkey pressed. isStorageWindowOpen: {isStorageWindowOpen}");
                 if (isStorageWindowOpen)
                 {
-                    UINexusStorageWindow.instance._Close();
+                    UINexusStorageWindow.instance?._Close();
                 }
                 else
                 {

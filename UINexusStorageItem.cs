@@ -23,57 +23,29 @@ namespace NexusLogistics
             // Create a root GameObject for the list item
             UINexusStorageItem item = UIUtil.CreateGameObject<UINexusStorageItem>("nexus-list-item", 550f, 28f);
             RectTransform baseTrans = item.transform as RectTransform;
-
-            // Clone a vanilla UI entry to get the style
-            UIResAmountEntry src = GameObject.Instantiate<UIResAmountEntry>(UIRoot.instance.uiGame.planetDetail.entryPrafab, baseTrans);
-            src.gameObject.SetActive(true);
-            UIUtil.NormalizeRectWithTopLeft(src, 0f, 0f, baseTrans);
-            (src.transform as RectTransform).sizeDelta = new Vector2(550f, 28f);
+            item.gameObject.AddComponent<Image>().color = new Color(0.1f, 0.1f, 0.1f, 0.3f);
 
             // --- Configure Item Icon ---
-            item.itemIcon = src.iconImage;
-            UIUtil.NormalizeRectWithTopLeft(item.itemIcon, 4f, 2f, baseTrans);
+            item.itemIcon = UIUtil.CreateImage("item-icon", baseTrans);
+            UIUtil.NormalizeRectWithTopLeft(item.itemIcon, 4f, 2f, 24f, 24f);
 
             // --- Configure Name Text ---
-            item.nameText = src.labelText;
-            item.nameText.text = "Item Name";
-            item.nameText.fontSize = 14;
-            UIUtil.NormalizeRectWithTopLeft(item.nameText, 32f, 4f, baseTrans);
-            (item.nameText.transform as RectTransform).sizeDelta = new Vector2(140f, 24f);
+            item.nameText = UIUtil.CreateText("item-name", "Item Name", 14, baseTrans);
+            UIUtil.NormalizeRectWithTopLeft(item.nameText, 32f, 4f, 140f, 24f);
 
             // --- Configure Count Text ---
-            item.countText = src.valueText;
-            item.countText.text = "999.9M";
+            item.countText = UIUtil.CreateText("item-count", "999.9M", 14, baseTrans);
             item.countText.alignment = TextAnchor.MiddleLeft;
-            item.countText.fontSize = 14;
-            UIUtil.NormalizeRectWithTopLeft(item.countText, 180f, 4f, baseTrans);
-            (item.countText.transform as RectTransform).sizeDelta = new Vector2(100f, 24f);
+            UIUtil.NormalizeRectWithTopLeft(item.countText, 180f, 4f, 100f, 24f);
 
             // --- Configure Proliferation Text ---
-            item.prolifText = GameObject.Instantiate<Text>(item.countText, baseTrans);
-            item.prolifText.name = "prolif-text";
-            item.prolifText.text = "Mk 3 (100%)";
-            UIUtil.NormalizeRectWithTopLeft(item.prolifText, 290f, 4f, baseTrans);
-            (item.prolifText.transform as RectTransform).sizeDelta = new Vector2(80f, 24f);
+            item.prolifText = UIUtil.CreateText("prolif-text", "Mk 3 (100%)", 14, baseTrans);
+            UIUtil.NormalizeRectWithTopLeft(item.prolifText, 290f, 4f, 80f, 24f);
 
             // --- Configure Limit InputField ---
-            UIStationWindow stationWindow = UIRoot.instance.uiGame.stationWindow;
-            item.limitInput = GameObject.Instantiate<InputField>(stationWindow.nameInput, baseTrans);
-            item.limitInput.gameObject.name = "limit-input";
-            Destroy(item.limitInput.GetComponent<UIButton>());
-            item.limitInput.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.05f);
-            RectTransform rect = UIUtil.NormalizeRectWithTopLeft(item.limitInput, 380f, 2f, baseTrans);
-            rect.sizeDelta = new Vector2(100, 24);
-            item.limitInput.textComponent.fontSize = 14;
+            item.limitInput = UIUtil.CreateInputField("limit-input", "99999", 14, baseTrans);
+            UIUtil.NormalizeRectWithTopLeft(item.limitInput, 380f, 2f, 100f, 24f);
             item.limitInput.textComponent.alignment = TextAnchor.MiddleRight;
-
-            // Clean up the cloned prefab
-            Destroy(src.iconHide);
-            Destroy(src.iconButton.gameObject);
-            src.iconImage = null;
-            src.labelText = null;
-            src.valueText = null;
-            Destroy(src);
 
             item.gameObject.SetActive(false); // Prefab should be disabled
             return item;
