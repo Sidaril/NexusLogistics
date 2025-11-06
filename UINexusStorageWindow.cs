@@ -83,7 +83,7 @@ namespace NexusLogistics
 
             // --- Create Dashboard Panel ---
             dashboardPanel = UIUtil.CreateGameObject<RectTransform>("dashboard-panel");
-            UIUtil.NormalizeRectWithMargin(dashboardPanel, 24f, 36f, 36f, 36f, contentTrans);
+            UIUtil.NormalizeRectWithMargin(dashboardPanel, 24f, 36f, 10f, 36f, contentTrans);
             dashboardPanel.gameObject.SetActive(true); // Active by default
 
             dashboardBottleneckText = UIUtil.CreateText("Loading dashboard...", 14);
@@ -94,17 +94,10 @@ namespace NexusLogistics
             // --- Create List View Panel ---
             // Create a container for the list view and position it exactly like the dashboard panel
             RectTransform listViewContainer = UIUtil.CreateGameObject<RectTransform>("list-view-container");
-            UIUtil.NormalizeRectWithMargin(listViewContainer, 24f, 36f, 36f, 36f, contentTrans);
+            UIUtil.NormalizeRectWithMargin(listViewContainer, 24f, 36f, 10f, 36f, contentTrans);
 
             // Create the list view inside the container, telling it to fill the container
             storageListView = MyUIListView.Create("nexus-storage-list", 0, 0, listViewContainer, this);
-
-            // FIX: Make the list view fill its container to resolve horizontal alignment issues
-            RectTransform rclv = storageListView.GetComponent<RectTransform>();
-            rclv.anchorMin = Vector2.zero; // Stretch from bottom-left
-            rclv.anchorMax = Vector2.one;  // Stretch to top-right
-            rclv.sizeDelta = Vector2.zero; // No size offset
-            rclv.anchoredPosition = Vector2.zero; // Centered
 
             storageListView.gameObject.SetActive(false); // Inactive by default
         }
