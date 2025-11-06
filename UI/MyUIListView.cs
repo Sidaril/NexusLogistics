@@ -42,6 +42,7 @@ namespace NexusLogistics.UI
             contentRect.anchorMin = new Vector2(0, 1);
             contentRect.anchorMax = new Vector2(0, 1);
             contentRect.pivot = new Vector2(0, 1);
+            contentRect.anchoredPosition = Vector2.zero; // <-- THE CRITICAL FIX
             result.recyclingListView.scrollRect = result.m_ScrollRect;
 
             // Configure the new list view
@@ -73,14 +74,6 @@ namespace NexusLogistics.UI
 
             // Set size
             RectTransform rect = go.GetComponent<RectTransform>();
-
-            // --- FIX ---
-            // Set anchors to top-left and reset position to align the list correctly.
-            rect.anchorMin = new Vector2(0, 1);
-            rect.anchorMax = new Vector2(0, 1);
-            rect.pivot = new Vector2(0, 1);
-            rect.anchoredPosition = Vector2.zero;
-            // --- END FIX ---
 
             if (width == 0 && height == 0)
             {
