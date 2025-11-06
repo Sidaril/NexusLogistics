@@ -44,7 +44,8 @@
       <Private>False</Private>
     </Reference>
     <Reference Include="DSPModSave">
-      <HintPath>..\..\AppData\Roaming\r2modmanPlus-local\DysonSphereProgram\profiles\Default\BepInEx\plugins\CommonAPI-DSPModSave\DSPModSave.dll</HintPath>
+      <HintPath>C:\Users\Josh\AppData\Roaming\r2modmanPlus-local\DysonSphereProgram\profiles\Default\BepInEx\plugins\CommonAPI-DSPModSave\DSPModSave.dll</HintPath>
+      <Private>False</Private>
     </Reference>
     <Reference Include="System">
       <Private>False</Private>
@@ -107,6 +108,8 @@
     <Compile Include="UI\MyUIListView.cs" />
     <Compile Include="UI\UIUtil.cs" />
     <Compile Include="UI\UIWindowControl.cs" />
+    <Compile Include="UI\ManualBehaviourPatch.cs" />
+    <Compile Include="UI\ManualBehaviour_Close_Patch.cs" />
     <Compile Include="UINexusMainWindow.cs" />
     <Compile Include="UINexusStorageItem.cs" />
     <Compile Include="UINexusStorageWindow.cs" />

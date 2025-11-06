@@ -18,9 +18,12 @@ namespace NexusLogistics.UI
             go.name = name;
             go.SetActive(false);
             GameObject.Destroy(go.GetComponent<UIInserterWindow>());
+            NexusLogistics.Log.LogInfo($"Adding component {typeof(T).Name} to {go.name}");
             ManualBehaviour win = go.AddComponent<T>();
+            win._Create();
 
-            for (int i = 0; i < go.transform.childCount; i++)
+            // Iterate backwards when destroying children to avoid index issues
+            for (int i = go.transform.childCount - 1; i >= 0; i--)
             {
                 GameObject child = go.transform.GetChild(i).gameObject;
                 if (child.name == "panel-bg")
@@ -41,6 +44,7 @@ namespace NexusLogistics.UI
                 }
                 else
                 {
+                    // Destroy all other children that are not the panel-bg
                     GameObject.Destroy(child);
                 }
             }
@@ -55,6 +59,7 @@ namespace NexusLogistics.UI
 
         public static void OpenWindow(ManualBehaviour win)
         {
+            NexusLogistics.Log.LogInfo($"UIWindowControl.OpenWindow called for {win.name}");
             win._Open();
         }
 

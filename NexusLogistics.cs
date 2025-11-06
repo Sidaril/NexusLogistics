@@ -1,4 +1,4 @@
-﻿using BepInEx;
+using BepInEx;
 using BepInEx.Configuration;
 using crecheng.DSPModSave;
 using HarmonyLib;
@@ -112,6 +112,11 @@ namespace NexusLogistics
         public static ConfigEntry<ProliferatorSelection> proliferatorSelection;
         public static ConfigEntry<int> fuelId;
 
+        public static bool isMainWindowOpen = false;
+        public static bool isStorageWindowOpen = false;
+
+        public static BepInEx.Logging.ManualLogSource Log { get; private set; }
+
         // Proliferation and Item Data
         private readonly List<(int, int)> proliferators = new List<(int, int)>();
         private readonly Dictionary<int, int> incPool = new Dictionary<int, int>();
@@ -128,7 +133,7 @@ namespace NexusLogistics
             public int CurrentStock;
         }
         public static List<BottleneckInfo> cachedBottlenecks = new List<BottleneckInfo>();
-        private float dashboardRefreshTimer = 0f;
+
         private const float DashboardRefreshInterval = 1.0f; // 1 second
         public static Dictionary<int, int> bottleneckCounters = new Dictionary<int, int>();
         private const int BottleneckPersistenceThreshold = 3; // 3 seconds
@@ -193,11 +198,14 @@ namespace NexusLogistics
         /// </summary>
         void Start()
         {
+            Log = base.Logger;
             BindConfigs();
             InitializeData();
 
             // Add this line to patch the UI control methods
             Harmony.CreateAndPatchAll(typeof(UIWindowControl.Patch));
+            Harmony.CreateAndPatchAll(typeof(ManualBehaviour_Open_Patch));
+            Harmony.CreateAndPatchAll(typeof(ManualBehaviour_Close_Patch));
             Harmony.CreateAndPatchAll(typeof(NexusLogisticsPatch));
 
             // Start the main processing thread.
@@ -211,8 +219,8 @@ namespace NexusLogistics
         [HarmonyPatch]
         public static class NexusLogisticsPatch
         {
-            [HarmonyPostfix, HarmonyPatch(typeof(GameMain), "Begin")]
-            public static void GameMain_Begin_Postfix()
+            [HarmonyPostfix, HarmonyPatch(typeof(UIGame), "_OnCreate")]
+            public static void UIGame__OnCreate_Postfix()
             {
                 // This is the safest place to create your UI windows
                 UINexusMainWindow.CreateInstance();
@@ -222,55 +230,30 @@ namespace NexusLogistics
 
         void Update()
         {
-            // This is your *new* hotkey logic
             if (hotKey.Value.IsDown())
             {
-                if (UINexusMainWindow.instance != null)
+                NexusLogistics.Log.LogInfo($"Main hotkey pressed. isMainWindowOpen: {isMainWindowOpen}");
+                if (isMainWindowOpen)
                 {
-                    if (UINexusMainWindow.instance.active)
-                        UINexusMainWindow.instance._Close();
-                    else
-                        UIWindowControl.OpenWindow(UINexusMainWindow.instance);
+                    UINexusMainWindow.instance._Close();
+                }
+                else
+                {
+                    UIWindowControl.OpenWindow(UINexusMainWindow.instance);
                 }
             }
 
             if (storageHotKey.Value.IsDown())
             {
-                if (UINexusStorageWindow.instance != null)
+                NexusLogistics.Log.LogInfo($"Storage hotkey pressed. isStorageWindowOpen: {isStorageWindowOpen}");
+                if (isStorageWindowOpen)
                 {
-                    if (UINexusStorageWindow.instance.active)
-                        UINexusStorageWindow.instance._Close();
-                    else
-                        UIWindowControl.OpenWindow(UINexusStorageWindow.instance);
+                    UINexusStorageWindow.instance._Close();
                 }
-            }
-
-            // Refresh dashboard data periodically
-            dashboardRefreshTimer += Time.deltaTime;
-            if (dashboardRefreshTimer >= DashboardRefreshInterval)
-            {
-                dashboardRefreshTimer = 0f;
-                var currentBottlenecks = GetPotentialBottlenecks();
-                var bottleneckIds = new HashSet<int>(currentBottlenecks.Select(b => b.ItemId));
-
-                foreach (var item in currentBottlenecks)
+                else
                 {
-                    if (!bottleneckCounters.ContainsKey(item.ItemId))
-                    {
-                        bottleneckCounters[item.ItemId] = 0;
-                    }
-                    bottleneckCounters[item.ItemId]++;
+                    UIWindowControl.OpenWindow(UINexusStorageWindow.instance);
                 }
-
-                var itemsToRemove = bottleneckCounters.Keys.Where(key => !bottleneckIds.Contains(key)).ToList();
-                foreach (var key in itemsToRemove)
-                {
-                    bottleneckCounters.Remove(key);
-                }
-
-                cachedBottlenecks = currentBottlenecks
-                    .Where(b => bottleneckCounters.ContainsKey(b.ItemId) && bottleneckCounters[b.ItemId] >= BottleneckPersistenceThreshold)
-                    .ToList();
             }
         }
 
@@ -297,7 +280,7 @@ namespace NexusLogistics
             infSand = Config.Bind("Configuration", "InfSand", false, "Infinite Soil Pile. Soil pile quantity is infinite (fixed at 1G)");
             useStorege = Config.Bind("Configuration", "useStorege", true, "Recover items from storage boxes and liquid tanks");
             autoReplenishTPPFuel = Config.Bind("Configuration", "autoReplenishTPPFuel", true, "Automatically replenish fuel for thermal power plants");
-            fuelId = Config.Bind("Configuration", "fuelId", 0, "Thermal Power Plant Fuel ID\n0: Auto-select...");
+            fuelId = Config.Bind("Configuration", "fuelId", 0, "Thermal Power Plant Fuel ID (0: Auto-select...)");
             infAmmo = Config.Bind("Configuration", "InfAmmo", false, "Infinite Ammo. Ammo in the logistics backpack and interstellar logistics stations have infinite quantity");
             infFleet = Config.Bind("Configuration", "infFleet", false, "Infinite Fleet. Drones and warships in the logistics backpack and interstellar logistics stations have infinite quantity");
         }
@@ -1394,17 +1377,47 @@ namespace NexusLogistics
 
         public static void RefreshStorageItemsForGUI(StorageCategory category)
         {
+            if (LDB.items == null)
+            {
+                Log.LogWarning($"LDB.items is null when trying to refresh storage items for GUI [{category}]. Skipping filtering and clearing displayed items.");
+                lock (remoteStorageLock)
+                {
+                    storageItemsForGUI.Clear();
+                }
+                return;
+            }
+
             lock (remoteStorageLock)
             {
-                storageItemsForGUI = remoteStorage
-                    .Where(pair =>
+                var filteredItems = new List<KeyValuePair<int, RemoteStorageItem>>();
+                foreach (var pair in remoteStorage)
+                {
+                    if (pair.Value.count <= 0)
                     {
-                        if (pair.Value.count <= 0) return false;
-                        ItemProto itemProto = LDB.items.Select(pair.Key);
-                        return itemProto != null && GetItemCategory(itemProto) == category;
-                    })
+                        Log.LogDebug($"RefreshStorageItemsForGUI: Skipping item {pair.Key} (count <= 0).");
+                        continue;
+                    }
+
+                    ItemProto itemProto = LDB.items.Select(pair.Key);
+                    Log.LogDebug($"RefreshStorageItemsForGUI: Processing item {pair.Key}. ItemProto: {itemProto}");
+
+                    if (itemProto == null)
+                    {
+                        Log.LogWarning($"RefreshStorageItemsForGUI: ItemProto is null for key {pair.Key}. This item won't be displayed.");
+                        continue;
+                    }
+
+                    if (GetItemCategory(itemProto) == category)
+                    {
+                        filteredItems.Add(pair);
+                    }
+                }
+
+                storageItemsForGUI = filteredItems
                     .OrderBy(item => LDB.items.Select(item.Key)?.name ?? string.Empty)
                     .ToList();
+                
+                Log.LogInfo($"RefreshStorageItemsForGUI completed for category {category}. Found {storageItemsForGUI.Count} items.");
             }
         }
 
@@ -1476,6 +1489,6 @@ namespace NexusLogistics
                 remoteStorage.Clear();
             }
         }
-        #endregion
-    }
-}
+                #endregion
+            }
+        }

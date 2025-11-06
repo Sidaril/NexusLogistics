@@ -15,7 +15,11 @@ namespace NexusLogistics.UI
             {
                 rect.sizeDelta = new Vector2(width, height);
             }
-            T item = go.AddComponent<T>();
+            T item = go.GetComponent<T>();
+            if (item == null)
+            {
+                item = go.AddComponent<T>();
+            }
             return item;
         }
 

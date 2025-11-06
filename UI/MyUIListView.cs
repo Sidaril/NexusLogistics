@@ -9,53 +9,28 @@ namespace NexusLogistics.UI
         public RecyclingListView recyclingListView;
         public ScrollRect m_ScrollRect;
 
-        public static MyUIListView Create(MonoBehaviour preFab, RecyclingListView.ItemDelegate dlgt, string goName = "", Transform parent = null, float vsWidth = 16f)
+        public static MyUIListView Create(string name, int width, int height, Transform parent)
         {
-            MyUIListView result;
-            UIListView uiListView;
-            UIListView src = UIRoot.instance.uiGame.tutorialWindow.entryList;
-            GameObject go = GameObject.Instantiate(src.gameObject);
-            if (parent != null)
+            GameObject go = new GameObject(name);
+            RectTransform rect = go.AddComponent<RectTransform>();
+            rect.SetParent(parent, false);
+            rect.sizeDelta = new Vector2(width, height);
+            rect.anchoredPosition = Vector2.zero;
+
+            MyUIListView result = go.AddComponent<MyUIListView>();
+            result.recyclingListView = go.AddComponent<RecyclingListView>();
+            result.recyclingListView.ItemCallback = (item, rowIdx) =>
             {
-                go.transform.SetParent(parent, false);
-            }
-            if (!string.IsNullOrEmpty(goName))
-            {
-                go.name = goName;
-            }
-
-            uiListView = go.GetComponent<UIListView>();
-            GameObject contentGo = uiListView.m_ScrollRect.content.gameObject;
-
-            result = go.AddComponent<MyUIListView>();
-            result.recyclingListView = contentGo.AddComponent<RecyclingListView>();
-
-            // Make a prefab out of this child panel
-            if (contentGo.transform.childCount > 0)
-            {
-                Destroy(contentGo.transform.GetChild(0).gameObject);
-                contentGo.transform.DetachChildren();
-            }
-            result.recyclingListView.ChildPrefab = preFab;
-            result.recyclingListView.ItemCallback = dlgt;
-
-            result.m_ScrollRect = uiListView.m_ScrollRect;
-            result.recyclingListView.scrollRect = result.m_ScrollRect;
-
-            result.recyclingListView.scrollRect.horizontalScrollbar.gameObject.SetActive(false);
-            result.recyclingListView.scrollRect.verticalScrollbar.gameObject.SetActive(true);
-            result.recyclingListView.scrollRect.vertical = true;
-            result.recyclingListView.scrollRect.horizontal = false;
-            result.recyclingListView.RowPadding = 4f;
-            Image barBg = result.recyclingListView.scrollRect.verticalScrollbar.GetComponent<Image>();
-            if (barBg != null)
-            {
-                barBg.color = new Color(0f, 0f, 0f, 0.62f);
-            }
-
-            RectTransform vsRect = result.recyclingListView.scrollRect.verticalScrollbar.transform as RectTransform;
-            vsRect.sizeDelta = new Vector2(vsWidth, vsRect.sizeDelta.y);
-            Destroy(uiListView);
+                UINexusStorageItem storageItem = item.GetComponent<UINexusStorageItem>();
+                if (storageItem != null)
+                {
+                    // storageItem.window = window; // Removed
+                    storageItem.Refresh(rowIdx);
+                }
+            };
+            result.recyclingListView.ChildPrefab = UINexusStorageItem.CreatePrefab();
+            // result.recyclingListView.CellSize = new Vector2(width, 30); // Removed
+            // result.recyclingListView.Direction = ScrollDirection.Vertical; // Removed
 
             return result;
         }

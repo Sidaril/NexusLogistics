@@ -35,12 +35,26 @@ namespace NexusLogistics
 
         protected override void _OnCreate()
         {
+            NexusLogistics.Log.LogInfo("UINexusStorageWindow._OnCreate called.");
             windowTrans = UIWindowControl.GetRectTransform(this);
-            windowTrans.sizeDelta = new Vector2(600, 500);
+            windowTrans.sizeDelta = new Vector2(900, 500);
+
+            // --- CHANGED ---
+            // Find the panel-bg to parent new UI elements to
+            RectTransform panelBg = windowTrans.Find("panel-bg") as RectTransform;
+            if (panelBg == null)
+            {
+                NexusLogistics.Log.LogError("NexusLogistics: Could not find 'panel-bg' in UINexusStorageWindow!");
+                return;
+            }
+            // --- END CHANGED ---
 
             // Create a content area
             contentTrans = UIUtil.CreateGameObject<RectTransform>("content", 600, 440);
-            UIUtil.NormalizeRectWithTopLeft(contentTrans, 0, 60, windowTrans);
+            // --- CHANGED ---
+            // Parent it to panelBg, offset from its top-left for the title bar
+            UIUtil.NormalizeRectWithTopLeft(contentTrans, 0, 60, panelBg);
+            // --- END CHANGED ---
 
             // --- Create Category Tabs ---
             float x_toolbar = 36f;
@@ -48,17 +62,17 @@ namespace NexusLogistics
             float padding = 4f;
             categoryButtons.Clear();
 
-            string[] categories = { "Dashboard", "Raw", "Intermeds", "Buildings", "Combat", "Science" };
+            string[] categories = { "Dashboard", "RawResources", "IntermediateProducts", "BuildingsAndVehicles", "AmmunitionAndCombat", "ScienceMatrices" };
             foreach (var categoryName in categories)
             {
-                NexusLogistics.StorageCategory category = (NexusLogistics.StorageCategory)System.Enum.Parse(typeof(NexusLogistics.StorageCategory), categoryName.Replace("Intermeds", "IntermediateProducts"));
+                NexusLogistics.StorageCategory category = (NexusLogistics.StorageCategory)System.Enum.Parse(typeof(NexusLogistics.StorageCategory), categoryName);
 
-                UIButton btn = UIUtil.MakeHiliteTextButton(categoryName, 80f, 24f);
+                UIButton btn = UIUtil.MakeHiliteTextButton(categoryName);
                 btn.data = (int)category;
                 UIUtil.NormalizeRectWithTopLeft(btn, x_toolbar, y_toolbar, contentTrans);
 
                 categoryButtons.Add(btn);
-                x_toolbar += 80f + padding;
+                x_toolbar += btn.GetComponent<RectTransform>().sizeDelta.x + padding;
             }
 
             // --- Create Dashboard Panel ---
@@ -69,14 +83,14 @@ namespace NexusLogistics
             dashboardBottleneckText = UIUtil.CreateText("Loading dashboard...", 14);
             UIUtil.NormalizeRectWithTopLeft(dashboardBottleneckText, 0, 0, dashboardPanel);
             dashboardBottleneckText.rectTransform.sizeDelta = new Vector2(500, 300);
-            dashboardBottleneckText.verticalOverflow = VerticalWrapMode.Truncate;
+            dashboardBottleneckText.alignment = TextAnchor.UpperLeft;
 
             // --- Create List View Panel ---
             Image bg = UIUtil.CreateGameObject<Image>("list-bg", 100f, 100f);
             bg.color = new Color(0f, 0f, 0f, 0.56f);
             UIUtil.NormalizeRectWithMargin(bg, 30f, 36f, 10f, 20f, contentTrans);
 
-            storageListView = MyUIListView.Create(UINexusStorageItem.CreatePrefab(), PopulateItem, "storage-list-view", bg.transform);
+            storageListView = MyUIListView.Create("nexus-storage-list", (int)bg.rectTransform.sizeDelta.x, (int)bg.rectTransform.sizeDelta.y, bg.rectTransform);
             UIUtil.NormalizeRectWithMargin(storageListView.transform, 0f, 0f, 0f, 0f, bg.transform);
             storageListView.m_ScrollRect.scrollSensitivity = 28f;
             storageListView.gameObject.SetActive(false); // Inactive by default
@@ -84,8 +98,9 @@ namespace NexusLogistics
 
         private void PopulateItem(MonoBehaviour item, int rowIndex)
         {
-            (item as UINexusStorageItem).window = this;
-            (item as UINexusStorageItem).Refresh(rowIndex);
+            UINexusStorageItem storageItem = item.GetComponent<UINexusStorageItem>();
+            storageItem.window = this;
+            storageItem.Refresh(rowIndex);
         }
 
         protected override bool _OnInit()
@@ -99,6 +114,7 @@ namespace NexusLogistics
 
         protected override void _OnRegEvent()
         {
+            NexusLogistics.Log.LogInfo("Registering category button events.");
             foreach (var btn in categoryButtons)
             {
                 btn.onClick += OnCategoryButtonClick;
@@ -114,12 +130,15 @@ namespace NexusLogistics
 
         protected override void _OnOpen()
         {
-            limitInputStrings.Clear(); // Clear cache
-            RefreshCategoryButtons();
-            RefreshPanel();
+            NexusLogistics.isStorageWindowOpen = true;
+            NexusLogistics.Log.LogInfo($"UINexusStorageWindow._OnOpen: isStorageWindowOpen = {NexusLogistics.isStorageWindowOpen}");
         }
 
-        protected override void _OnClose() { }
+        protected override void _OnClose()
+        {
+            NexusLogistics.isStorageWindowOpen = false;
+            NexusLogistics.Log.LogInfo($"UINexusStorageWindow._OnClose: isStorageWindowOpen = {NexusLogistics.isStorageWindowOpen}");
+        }
 
         protected override void _OnUpdate()
         {
@@ -140,6 +159,7 @@ namespace NexusLogistics
 
         private void OnCategoryButtonClick(int data)
         {
+            NexusLogistics.Log.LogInfo($"Category button clicked: {data}");
             selectedStorageCategory = (NexusLogistics.StorageCategory)data;
             RefreshCategoryButtons();
             RefreshPanel();
@@ -155,6 +175,7 @@ namespace NexusLogistics
 
         private void RefreshPanel()
         {
+            NexusLogistics.Log.LogInfo($"Refreshing panel. Selected category: {selectedStorageCategory}");
             if (selectedStorageCategory == NexusLogistics.StorageCategory.Dashboard)
             {
                 // Show dashboard, hide list
