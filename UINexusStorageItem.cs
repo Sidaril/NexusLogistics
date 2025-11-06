@@ -36,15 +36,15 @@ namespace NexusLogistics
             // --- Configure Count Text ---
             item.countText = UIUtil.CreateText("item-count", "999.9M", 14, baseTrans);
             item.countText.alignment = TextAnchor.MiddleLeft;
-            UIUtil.NormalizeRectWithTopLeft(item.countText, 180f, 4f, 100f, 24f);
+            UIUtil.NormalizeRectWithTopLeft(item.countText, 220f, 4f, 100f, 24f);
 
             // --- Configure Proliferation Text ---
             item.prolifText = UIUtil.CreateText("prolif-text", "Mk 3 (100%)", 14, baseTrans);
-            UIUtil.NormalizeRectWithTopLeft(item.prolifText, 290f, 4f, 80f, 24f);
+            UIUtil.NormalizeRectWithTopLeft(item.prolifText, 330f, 4f, 80f, 24f);
 
             // --- Configure Limit InputField ---
             item.limitInput = UIUtil.CreateInputField("limit-input", "99999", 14, baseTrans);
-            UIUtil.NormalizeRectWithTopLeft(item.limitInput, 380f, 2f, 100f, 24f);
+            UIUtil.NormalizeRectWithTopLeft(item.limitInput, 420f, 2f, 100f, 24f);
             item.limitInput.textComponent.alignment = TextAnchor.MiddleRight;
 
             item.gameObject.SetActive(false); // Prefab should be disabled
