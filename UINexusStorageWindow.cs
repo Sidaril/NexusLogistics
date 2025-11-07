@@ -99,12 +99,17 @@ namespace NexusLogistics
             // Create the list view inside the container, telling it to fill the container
             storageListView = MyUIListView.Create("nexus-storage-list", 0, 0, listViewContainer, this);
 
-            // --- THE REAL, FINAL FIX ---
-            // A parent layout group is resetting the position every frame.
-            // Add a LayoutElement and set ignoreLayout to exempt this object from the group's control.
-            LayoutElement layoutElement = storageListView.gameObject.AddComponent<LayoutElement>();
-            layoutElement.ignoreLayout = true;
-            (storageListView.transform as RectTransform).anchoredPosition = Vector2.zero;
+            // --- THE REAL, FINAL FIX (based on Unity Explorer data) ---
+            // Set RectTransform properties to match the desired layout.
+            RectTransform listRect = storageListView.transform as RectTransform;
+            listRect.anchoredPosition = new Vector2(-545.9729f, -0.0004f);
+            listRect.pivot = new Vector2(0f, 1f);
+            listRect.sizeDelta = new Vector2(256f, 0f);
+            // Anchors are already correctly set to stretch by UIUtil.NormalizeRectWithMargin on listViewContainer,
+            // and MyUIListView.Create likely inherits this or sets its own.
+            // We explicitly set them here for clarity and robustness, though they might already be correct.
+            listRect.anchorMin = new Vector2(0, 0);
+            listRect.anchorMax = new Vector2(1, 1);
 
             storageListView.gameObject.SetActive(false); // Inactive by default
         }
