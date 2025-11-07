@@ -21,18 +21,6 @@ namespace NexusLogistics.UI
             UIListView originalListView = go.GetComponent<UIListView>();
             GameObject contentGo = originalListView.m_ContentPanel.gameObject;
 
-            // --- FIX ---
-            // Remove any layout components that might interfere with manual positioning
-            if (go.GetComponent<ContentSizeFitter>() != null)
-            {
-                GameObject.Destroy(go.GetComponent<ContentSizeFitter>());
-            }
-            if (go.GetComponent<LayoutElement>() != null)
-            {
-                GameObject.Destroy(go.GetComponent<LayoutElement>());
-            }
-            // --- END FIX ---
-
             MyUIListView result = go.AddComponent<MyUIListView>();
             result.m_ScrollRect = originalListView.m_ScrollRect;
 
@@ -73,7 +61,6 @@ namespace NexusLogistics.UI
 
             // Set size
             RectTransform rect = go.GetComponent<RectTransform>();
-
             if (width == 0 && height == 0)
             {
                 // If size is 0, fill the parent container

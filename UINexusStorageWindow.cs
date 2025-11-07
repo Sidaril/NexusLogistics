@@ -23,6 +23,7 @@ namespace NexusLogistics
         public NexusLogistics.StorageCategory selectedStorageCategory = NexusLogistics.StorageCategory.Dashboard;
         public Dictionary<int, string> limitInputStrings = new Dictionary<int, string>();
         private float refreshTimer = 0f;
+        private bool listViewPositionFixed = false; // Flag to run the layout fix only once
 
         public static void CreateInstance()
         {
@@ -99,10 +100,6 @@ namespace NexusLogistics
             // Create the list view inside the container, telling it to fill the container
             storageListView = MyUIListView.Create("nexus-storage-list", 0, 0, listViewContainer, this);
 
-            // --- THE REAL FIX ---
-            // The entire list view object is offset, not its content. Reset its position.
-            (storageListView.transform as RectTransform).anchoredPosition = Vector2.zero;
-
             storageListView.gameObject.SetActive(false); // Inactive by default
         }
 
@@ -152,6 +149,16 @@ namespace NexusLogistics
 
         protected override void _OnUpdate()
         {
+            // --- FIX for persistent layout bug ---
+            // The list view's position is being overridden after _OnCreate.
+            // We'll force it to the correct position here, once, after it has been initialized.
+            if (!listViewPositionFixed && storageListView != null && storageListView.gameObject.activeInHierarchy)
+            {
+                (storageListView.transform as RectTransform).anchoredPosition = Vector2.zero;
+                listViewPositionFixed = true; // Ensure this only runs once
+            }
+            // --- END FIX ---
+
             if (VFInput.escape && !VFInput.inputing)
             {
                 VFInput.UseEscape();
