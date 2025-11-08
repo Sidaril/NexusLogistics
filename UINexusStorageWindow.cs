@@ -99,6 +99,18 @@ namespace NexusLogistics
             // Create the list view inside the container, telling it to fill the container
             storageListView = MyUIListView.Create("nexus-storage-list", 0, 0, listViewContainer, this);
 
+            // Find and modify the vertical scrollbar to user's specifications
+            Transform scrollbarV = storageListView.transform.Find("Scrollbar V");
+            if (scrollbarV != null)
+            {
+                RectTransform scrollbarRect = scrollbarV as RectTransform;
+                if (scrollbarRect != null)
+                {
+                    scrollbarRect.anchoredPosition = new Vector2(282.14f, 0f);
+                    scrollbarRect.sizeDelta = new Vector2(10f, -20f);
+                }
+            }
+
             // --- THE REAL, FINAL FIX (based on Unity Explorer data) ---
             // Set RectTransform properties to match the desired layout.
             RectTransform listRect = storageListView.transform as RectTransform;
