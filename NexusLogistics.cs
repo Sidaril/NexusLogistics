@@ -95,10 +95,18 @@ namespace NexusLogistics
         public const string NAME = "NexusLogistics";
         public const string VERSION = "1.6.0";
 
-        private const int SAVE_VERSION = 2;
+        private const int SAVE_VERSION = 3;
+
+        // Player Data
+        private long playerBalance = 0;
 
         private enum ProliferatorSelection { All, Mk1, Mk2, Mk3 }
-        private enum StorageCategory { Dashboard, RawResources, IntermediateProducts, BuildingsAndVehicles, AmmunitionAndCombat, ScienceMatrices }
+        private enum StorageCategory { Dashboard, RawResources, IntermediateProducts, BuildingsAndVehicles, AmmunitionAndCombat, ScienceMatrices, Market }
+
+        // Market Data
+        private readonly Dictionary<int, long> itemPrices = new Dictionary<int, long>();
+        private readonly Dictionary<int, string> marketQuantityInputs = new Dictionary<int, string>();
+        private List<ItemProto> allItemsForMarket = new List<ItemProto>();
 
         // Remote Storage Data
         private readonly Dictionary<int, RemoteStorageItem> remoteStorage = new Dictionary<int, RemoteStorageItem>();
@@ -122,7 +130,7 @@ namespace NexusLogistics
         private bool showGUI = false;
         private bool showStorageGUI = false;
         private Rect windowRect = new Rect(700, 250, 600, 500);
-        private Rect storageWindowRect = new Rect(100, 250, 550, 500);
+        private Rect storageWindowRect = new Rect(100, 250, 900, 500);
         private Vector2 storageScrollPosition, mainPanelScrollPosition;
         private int selectedPanel = 0;
         private readonly Dictionary<int, string> fuelOptions = new Dictionary<int, string>();
@@ -417,6 +425,51 @@ namespace NexusLogistics
 
         #endregion
 
+        #region Market Transaction Methods
+
+        private void BuyItem(int itemId, long price)
+        {
+            if (!marketQuantityInputs.TryGetValue(itemId, out string input) || !int.TryParse(input, out int quantity) || quantity <= 0)
+            {
+                return; // Invalid quantity
+            }
+
+            long totalCost = price * quantity;
+            int affordableQuantity = quantity;
+
+            if (totalCost > playerBalance)
+            {
+                affordableQuantity = (int)(playerBalance / price);
+            }
+
+            if (affordableQuantity <= 0)
+            {
+                return; // Can't afford any
+            }
+
+            long finalCost = price * affordableQuantity;
+            playerBalance -= finalCost;
+            AddItem(itemId, affordableQuantity, 0, true); // Bypass storage limit for purchases
+        }
+
+        private void SellItem(int itemId, long price)
+        {
+            if (!marketQuantityInputs.TryGetValue(itemId, out string input) || !int.TryParse(input, out int quantity) || quantity <= 0)
+            {
+                return; // Invalid quantity
+            }
+
+            int[] takenItems = TakeItem(itemId, quantity);
+            int soldQuantity = takenItems[0];
+
+            if (soldQuantity > 0)
+            {
+                playerBalance += price * soldQuantity;
+            }
+        }
+
+        #endregion
+
         #region Initialization
 
         /// <summary>
@@ -448,6 +501,9 @@ namespace NexusLogistics
         /// </summary>
         private void InitializeData()
         {
+            LoadItemPrices();
+            allItemsForMarket = LDB.items.dataArray.Where(p => p != null && p.ID > 0).ToList();
+
             fuelOptions.Add(0, "Auto");
             fuelOptions.Add(ItemIds.Coal, "Coal");
             fuelOptions.Add(ItemIds.Graphite, "Graphite");
@@ -475,6 +531,40 @@ namespace NexusLogistics
             ammos.Add(EAmmoType.Cannon, new List<int> { ItemIds.CrystalShellSet, ItemIds.HighExplosiveShellSet, ItemIds.ShellSet });
             ammos.Add(EAmmoType.Plasma, new List<int> { ItemIds.AntimatterCapsule, ItemIds.PlasmaCapsule });
             ammos.Add(EAmmoType.EMCapsule, new List<int> { ItemIds.SuppressionCapsule, ItemIds.JammingCapsule });
+        }
+
+        /// <summary>
+        /// Loads item prices from a custom configuration file.
+        /// </summary>
+        private void LoadItemPrices()
+        {
+            string configPath = Path.Combine(Paths.ConfigPath, "nexus-logistics-item-prices.cfg");
+            if (!File.Exists(configPath))
+            {
+                using (StreamWriter sw = File.CreateText(configPath))
+                {
+                    sw.WriteLine("# This file contains the base prices for items in the market.");
+                    sw.WriteLine("# Format: ItemID = Price");
+                    sw.WriteLine("# Example: 1001 = 10  (Iron Ore)");
+                }
+            }
+
+            foreach (string line in File.ReadAllLines(configPath))
+            {
+                if (line.StartsWith("#") || string.IsNullOrWhiteSpace(line)) continue;
+
+                string[] parts = line.Split('=');
+                if (parts.Length == 2)
+                {
+                    if (int.TryParse(parts[0].Trim(), out int itemId) && long.TryParse(parts[1].Trim(), out long price))
+                    {
+                        if (!itemPrices.ContainsKey(itemId))
+                        {
+                            itemPrices.Add(itemId, price);
+                        }
+                    }
+                }
+            }
         }
 
         #endregion
@@ -568,12 +658,16 @@ namespace NexusLogistics
 
         void StorageWindowFunction(int windowID)
         {
-            string[] categories = { "Dashboard", "Raw", "Intermeds", "Buildings", "Combat", "Science" };
+            string[] categories = { "Dashboard", "Raw", "Intermeds", "Buildings", "Combat", "Science", "Market" };
             selectedStorageCategory = (StorageCategory)GUILayout.Toolbar((int)selectedStorageCategory, categories, toolbarStyle);
 
             if (selectedStorageCategory == StorageCategory.Dashboard)
             {
                 DashboardPanel();
+            }
+            else if (selectedStorageCategory == StorageCategory.Market)
+            {
+                MarketPanel();
             }
             else
             {
@@ -648,6 +742,74 @@ namespace NexusLogistics
             GUILayout.EndVertical();
             }
             GUI.DragWindow();
+        }
+
+        void MarketPanel()
+        {
+            GUILayout.Label($"Balance: ${playerBalance:N0}", labelStyle);
+            GUILayout.Space(10);
+
+            // Header
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Item", labelStyle, GUILayout.Width(150));
+            GUILayout.Label("In Storage", labelStyle, GUILayout.Width(100));
+            GUILayout.Label("Buy Price", labelStyle, GUILayout.Width(100));
+            GUILayout.Label("Sell Price", labelStyle, GUILayout.Width(100));
+            GUILayout.Label("Quantity", labelStyle, GUILayout.Width(100));
+            GUILayout.Label("Actions", labelStyle, GUILayout.Width(200));
+            GUILayout.EndHorizontal();
+
+            storageScrollPosition = GUILayout.BeginScrollView(storageScrollPosition, scrollViewStyle);
+
+            foreach (var itemProto in allItemsForMarket)
+            {
+                if (!itemPrices.TryGetValue(itemProto.ID, out long basePrice))
+                {
+                    continue; // Don't show items without a price
+                }
+
+                long sellPrice = basePrice / 2;
+
+                int currentStock = 0;
+                lock (remoteStorageLock)
+                {
+                    if (remoteStorage.ContainsKey(itemProto.ID))
+                    {
+                        currentStock = remoteStorage[itemProto.ID].count;
+                    }
+                }
+
+                if (!marketQuantityInputs.ContainsKey(itemProto.ID))
+                {
+                    marketQuantityInputs[itemProto.ID] = "1";
+                }
+
+                GUILayout.BeginHorizontal();
+                GUILayout.Label(itemProto.name, labelStyle, GUILayout.Width(150));
+                GUILayout.Label(currentStock.ToString("N0"), labelStyle, GUILayout.Width(100));
+                GUILayout.Label($"${basePrice:N0}", labelStyle, GUILayout.Width(100));
+                GUILayout.Label($"${sellPrice:N0}", labelStyle, GUILayout.Width(100));
+
+                string currentInput = marketQuantityInputs[itemProto.ID];
+                string newInput = GUILayout.TextField(currentInput, textFieldStyle, GUILayout.Width(100));
+                if (newInput != currentInput)
+                {
+                    marketQuantityInputs[itemProto.ID] = newInput;
+                }
+
+                if (GUILayout.Button("Buy", buttonStyle, GUILayout.Width(80)))
+                {
+                    BuyItem(itemProto.ID, basePrice);
+                }
+                if (GUILayout.Button("Sell", buttonStyle, GUILayout.Width(80)))
+                {
+                    SellItem(itemProto.ID, sellPrice);
+                }
+
+                GUILayout.EndHorizontal();
+            }
+
+            GUILayout.EndScrollView();
         }
 
         void DashboardPanel()
@@ -1766,6 +1928,7 @@ namespace NexusLogistics
         public void Export(BinaryWriter w)
         {
             w.Write(SAVE_VERSION);
+            w.Write(playerBalance);
             lock (remoteStorageLock)
             {
                 w.Write(remoteStorage.Count);
@@ -1782,6 +1945,15 @@ namespace NexusLogistics
             int version = r.ReadInt32();
             if (version > SAVE_VERSION) return;
 
+            if (version >= 3)
+            {
+                playerBalance = r.ReadInt64();
+            }
+            else
+            {
+                playerBalance = 0;
+            }
+
             lock (remoteStorageLock)
             {
                 remoteStorage.Clear();
@@ -1796,6 +1968,7 @@ namespace NexusLogistics
 
         public void IntoOtherSave()
         {
+            playerBalance = 0;
             lock (remoteStorageLock)
             {
                 remoteStorage.Clear();
