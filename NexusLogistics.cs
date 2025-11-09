@@ -501,28 +501,39 @@ namespace NexusLogistics
                 { 1122, 1000 }, // Antimatter
             };
 
-            for (int i = 0; i < allItemsForMarket.Count; i++)
+            bool newPricesAdded;
+            do
             {
-                var item = allItemsForMarket[i];
-                if (prices.ContainsKey(item.ID)) continue;
-
-                var recipe = GetRecipe(item.ID);
-                if (recipe == null) continue;
-
-                long price = 0;
-                for (int j = 0; j < recipe.Items.Length; j++)
+                newPricesAdded = false;
+                foreach (var item in allItemsForMarket)
                 {
-                    if (prices.TryGetValue(recipe.Items[j], out long ingredientPrice))
+                    if (prices.ContainsKey(item.ID)) continue;
+
+                    var recipe = GetRecipe(item.ID);
+                    if (recipe == null) continue;
+
+                    long currentPrice = 0;
+                    bool allIngredientsPriced = true;
+                    for (int j = 0; j < recipe.Items.Length; j++)
                     {
-                        price += ingredientPrice * recipe.ItemCounts[j];
+                        if (prices.TryGetValue(recipe.Items[j], out long ingredientPrice))
+                        {
+                            currentPrice += ingredientPrice * recipe.ItemCounts[j];
+                        }
+                        else
+                        {
+                            allIngredientsPriced = false;
+                            break;
+                        }
+                    }
+
+                    if (allIngredientsPriced && currentPrice > 0)
+                    {
+                        prices[item.ID] = currentPrice + (long)(currentPrice * 0.5); // Add a 50% premium for crafting
+                        newPricesAdded = true;
                     }
                 }
-
-                if (price > 0)
-                {
-                    prices[item.ID] = price + (long)(price * 0.5); // Add a 50% premium for crafting
-                }
-            }
+            } while (newPricesAdded);
 
             return prices;
         }
