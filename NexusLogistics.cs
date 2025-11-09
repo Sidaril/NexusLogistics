@@ -520,7 +520,7 @@ namespace NexusLogistics
 
                 if (price > 0)
                 {
-                    prices[item.ID] = price + (long)(price * 0.1); // Add a 10% premium for crafting
+                    prices[item.ID] = price + (long)(price * 0.5); // Add a 50% premium for crafting
                 }
             }
 
