@@ -604,44 +604,73 @@ namespace NexusLogistics
         }
 
         /// <summary>
-        /// Loads item prices from a custom configuration file.
+        /// Loads item prices from a custom configuration file, and adds any missing items from the default list.
         /// </summary>
         private void LoadItemPrices()
         {
             string configPath = Path.Combine(Paths.ConfigPath, "nexus-logistics-item-prices.cfg");
-            if (!File.Exists(configPath))
-            {
-                var defaultPrices = GenerateDefaultPrices();
-                using (StreamWriter sw = File.CreateText(configPath))
-                {
-                    sw.WriteLine("# This file contains the base prices for items in the market.");
-                    sw.WriteLine("# Format: ItemID = Price");
-                    sw.WriteLine("# You can modify these values. The mod will not overwrite them once this file is created.");
+            var defaultPrices = GenerateDefaultPrices();
 
-                    foreach (var item in allItemsForMarket.OrderBy(i => i.ID))
+            // Load existing prices from the config file
+            if (File.Exists(configPath))
+            {
+                foreach (string line in File.ReadAllLines(configPath))
+                {
+                    if (line.StartsWith("#") || string.IsNullOrWhiteSpace(line)) continue;
+
+                    string[] parts = line.Split('#')[0].Split('=');
+                    if (parts.Length == 2)
                     {
-                        if (defaultPrices.TryGetValue(item.ID, out long price))
+                        if (int.TryParse(parts[0].Trim(), out int itemId) && long.TryParse(parts[1].Trim(), out long price))
                         {
-                            sw.WriteLine($"{item.ID} = {price} # {item.name}");
+                            if (!itemPrices.ContainsKey(itemId))
+                            {
+                                itemPrices.Add(itemId, price);
+                            }
+                            else
+                            {
+                                itemPrices[itemId] = price; // Overwrite with user's value
+                            }
                         }
                     }
                 }
             }
 
-            foreach (string line in File.ReadAllLines(configPath))
+            // Add missing default prices
+            bool needsSave = !File.Exists(configPath);
+            foreach (var defaultPrice in defaultPrices)
             {
-                if (line.StartsWith("#") || string.IsNullOrWhiteSpace(line)) continue;
-
-                string[] parts = line.Split('=');
-                if (parts.Length == 2)
+                if (!itemPrices.ContainsKey(defaultPrice.Key))
                 {
-                    if (int.TryParse(parts[0].Trim(), out int itemId) && long.TryParse(parts[1].Trim(), out long price))
+                    itemPrices.Add(defaultPrice.Key, defaultPrice.Value);
+                    needsSave = true;
+                }
+            }
+
+            // Save the updated file if new items were added or if the file didn't exist
+            if (needsSave)
+            {
+                try
+                {
+                    using (StreamWriter sw = new StreamWriter(configPath, false)) // Overwrite the file
                     {
-                        if (!itemPrices.ContainsKey(itemId))
+                        sw.WriteLine("# This file contains the base prices for items in the market.");
+                        sw.WriteLine("# Format: ItemID = Price");
+                        sw.WriteLine("# You can modify these values. The mod will update this file with new items, but will preserve your custom prices.");
+
+                        // Write all items (user-modified and new defaults) to the file, sorted by ID
+                        foreach (var item in allItemsForMarket.OrderBy(i => i.ID))
                         {
-                            itemPrices.Add(itemId, price);
+                            if (itemPrices.TryGetValue(item.ID, out long price))
+                            {
+                                sw.WriteLine($"{item.ID} = {price} # {item.name}");
+                            }
                         }
                     }
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError($"Failed to save item prices configuration: {ex}");
                 }
             }
         }
