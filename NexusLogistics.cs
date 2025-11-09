@@ -95,10 +95,11 @@ namespace NexusLogistics
         public const string NAME = "NexusLogistics";
         public const string VERSION = "1.6.0";
 
-        private const int SAVE_VERSION = 3;
+        private const int SAVE_VERSION = 4;
 
         // Player Data
         private long playerBalance = 0;
+        private readonly HashSet<int> unlockedItems = new HashSet<int>();
 
         private enum ProliferatorSelection { All, Mk1, Mk2, Mk3 }
         private enum StorageCategory { Dashboard, RawResources, IntermediateProducts, BuildingsAndVehicles, AmmunitionAndCombat, ScienceMatrices, Market }
@@ -468,6 +469,64 @@ namespace NexusLogistics
             }
         }
 
+        private RecipeProto GetRecipe(int itemId)
+        {
+            return LDB.recipes.dataArray.FirstOrDefault(r => r.Results.Length > 0 && r.Results[0] == itemId);
+        }
+
+
+        private Dictionary<int, long> GenerateDefaultPrices()
+        {
+            var prices = new Dictionary<int, long>
+            {
+                // Raw Materials
+                { 1001, 10 }, // Iron Ore
+                { 1002, 10 }, // Copper Ore
+                { 1003, 20 }, // Silicon Ore
+                { 1004, 20 }, // Titanium Ore
+                { 1005, 30 }, // Stone
+                { 1006, 15 }, // Coal
+                { 1007, 25 }, // Crude Oil
+                { 1011, 100 }, // Fire Ice
+                { 1012, 100 }, // Kimberlite Ore
+                { 1013, 100 }, // Fractal Silicon
+                { 1014, 100 }, // Organic Crystal
+                { 1015, 150 }, // Optical Grating Crystal
+                { 1016, 200 }, // Spiniform Stalagmite Crystal
+                { 1017, 250 }, // Unipolar Magnet
+                { 1030, 5 }, // Wood
+                { 1031, 10 }, // Plant Fuel
+                { 1120, 30 }, // Hydrogen
+                { 1121, 60 }, // Deuterium
+                { 1122, 1000 }, // Antimatter
+            };
+
+            for (int i = 0; i < allItemsForMarket.Count; i++)
+            {
+                var item = allItemsForMarket[i];
+                if (prices.ContainsKey(item.ID)) continue;
+
+                var recipe = GetRecipe(item.ID);
+                if (recipe == null) continue;
+
+                long price = 0;
+                for (int j = 0; j < recipe.Items.Length; j++)
+                {
+                    if (prices.TryGetValue(recipe.Items[j], out long ingredientPrice))
+                    {
+                        price += ingredientPrice * recipe.ItemCounts[j];
+                    }
+                }
+
+                if (price > 0)
+                {
+                    prices[item.ID] = price + (long)(price * 0.1); // Add a 10% premium for crafting
+                }
+            }
+
+            return prices;
+        }
+
         #endregion
 
         #region Initialization
@@ -501,8 +560,8 @@ namespace NexusLogistics
         /// </summary>
         private void InitializeData()
         {
-            LoadItemPrices();
             allItemsForMarket = LDB.items.dataArray.Where(p => p != null && p.ID > 0).ToList();
+            LoadItemPrices();
 
             fuelOptions.Add(0, "Auto");
             fuelOptions.Add(ItemIds.Coal, "Coal");
@@ -541,11 +600,20 @@ namespace NexusLogistics
             string configPath = Path.Combine(Paths.ConfigPath, "nexus-logistics-item-prices.cfg");
             if (!File.Exists(configPath))
             {
+                var defaultPrices = GenerateDefaultPrices();
                 using (StreamWriter sw = File.CreateText(configPath))
                 {
                     sw.WriteLine("# This file contains the base prices for items in the market.");
                     sw.WriteLine("# Format: ItemID = Price");
-                    sw.WriteLine("# Example: 1001 = 10  (Iron Ore)");
+                    sw.WriteLine("# You can modify these values. The mod will not overwrite them once this file is created.");
+
+                    foreach (var item in allItemsForMarket.OrderBy(i => i.ID))
+                    {
+                        if (defaultPrices.TryGetValue(item.ID, out long price))
+                        {
+                            sw.WriteLine($"{item.ID} = {price} # {item.name}");
+                        }
+                    }
                 }
             }
 
@@ -797,10 +865,13 @@ namespace NexusLogistics
                     marketQuantityInputs[itemProto.ID] = newInput;
                 }
 
-                if (GUILayout.Button("Buy", buttonStyle, GUILayout.Width(80)))
+                bool itemUnlocked = unlockedItems.Contains(itemProto.ID);
+                GUI.enabled = itemUnlocked;
+                if (GUILayout.Button(itemUnlocked ? "Buy" : "Locked", buttonStyle, GUILayout.Width(80)))
                 {
                     BuyItem(itemProto.ID, basePrice);
                 }
+                GUI.enabled = true;
                 if (GUILayout.Button("Sell", buttonStyle, GUILayout.Width(80)))
                 {
                     SellItem(itemProto.ID, sellPrice);
@@ -1670,6 +1741,7 @@ namespace NexusLogistics
 
                 if (amountToAdd > 0)
                 {
+                    unlockedItems.Add(itemId);
                     RecordAdd(itemId, amountToAdd);
                 }
 
@@ -1929,6 +2001,13 @@ namespace NexusLogistics
         {
             w.Write(SAVE_VERSION);
             w.Write(playerBalance);
+
+            w.Write(unlockedItems.Count);
+            foreach (int itemId in unlockedItems)
+            {
+                w.Write(itemId);
+            }
+
             lock (remoteStorageLock)
             {
                 w.Write(remoteStorage.Count);
@@ -1954,6 +2033,16 @@ namespace NexusLogistics
                 playerBalance = 0;
             }
 
+            unlockedItems.Clear();
+            if (version >= 4)
+            {
+                int unlockedCount = r.ReadInt32();
+                for (int i = 0; i < unlockedCount; i++)
+                {
+                    unlockedItems.Add(r.ReadInt32());
+                }
+            }
+
             lock (remoteStorageLock)
             {
                 remoteStorage.Clear();
@@ -1969,6 +2058,7 @@ namespace NexusLogistics
         public void IntoOtherSave()
         {
             playerBalance = 0;
+            unlockedItems.Clear();
             lock (remoteStorageLock)
             {
                 remoteStorage.Clear();
