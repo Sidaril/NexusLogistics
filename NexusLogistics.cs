@@ -1,4 +1,4 @@
-﻿using BepInEx;
+using BepInEx;
 using BepInEx.Configuration;
 using crecheng.DSPModSave;
 using HarmonyLib;
@@ -95,10 +95,25 @@ namespace NexusLogistics
         public const string NAME = "NexusLogistics";
         public const string VERSION = "1.6.0";
 
-        private const int SAVE_VERSION = 2;
+        private const int SAVE_VERSION = 6;
+
+        // Player Data
+        private long playerBalance = 0;
+        private readonly HashSet<int> unlockedItems = new HashSet<int>();
 
         private enum ProliferatorSelection { All, Mk1, Mk2, Mk3 }
-        private enum StorageCategory { Dashboard, RawResources, IntermediateProducts, BuildingsAndVehicles, AmmunitionAndCombat, ScienceMatrices }
+        private enum StorageCategory { Dashboard, Storage, Market }
+
+        // Market Data
+        private readonly Dictionary<int, long> itemPrices = new Dictionary<int, long>();
+        private readonly Dictionary<int, string> marketQuantityInputs = new Dictionary<int, string>();
+        private List<ItemProto> allItemsForMarket = new List<ItemProto>();
+        private int marketSubTab = 0; // 0 for Main, 1 for Orders
+
+        // Market Order Data
+        private readonly Dictionary<int, MarketOrder> marketOrders = new Dictionary<int, MarketOrder>();
+        private readonly Dictionary<int, string> buyThresholdInputs = new Dictionary<int, string>();
+        private readonly Dictionary<int, string> sellThresholdInputs = new Dictionary<int, string>();
 
         // Remote Storage Data
         private readonly Dictionary<int, RemoteStorageItem> remoteStorage = new Dictionary<int, RemoteStorageItem>();
@@ -122,12 +137,14 @@ namespace NexusLogistics
         private bool showGUI = false;
         private bool showStorageGUI = false;
         private Rect windowRect = new Rect(700, 250, 600, 500);
-        private Rect storageWindowRect = new Rect(100, 250, 550, 500);
+        private Rect storageWindowRect = new Rect(100, 250, 900, 500);
         private Vector2 storageScrollPosition, mainPanelScrollPosition;
         private int selectedPanel = 0;
         private readonly Dictionary<int, string> fuelOptions = new Dictionary<int, string>();
         private int selectedFuelIndex;
+        private enum ItemCategory { RawResources, IntermediateProducts, BuildingsAndVehicles, AmmunitionAndCombat, ScienceMatrices }
         private StorageCategory selectedStorageCategory = StorageCategory.Dashboard;
+        private ItemCategory selectedItemCategory = ItemCategory.RawResources;
         private readonly Dictionary<int, string> limitInputStrings = new Dictionary<int, string>();
         private List<KeyValuePair<int, RemoteStorageItem>> storageItemsForGUI = new List<KeyValuePair<int, RemoteStorageItem>>();
 
@@ -173,6 +190,36 @@ namespace NexusLogistics
                     item.limit = r.ReadInt32();
                 }
                 return item;
+            }
+        }
+
+        private class MarketOrder
+        {
+            public int BuyThreshold; // Buy if item count is BELOW this
+            public int SellThreshold; // Sell if item count is ABOVE this
+
+            public void Export(BinaryWriter w)
+            {
+                w.Write(BuyThreshold);
+                w.Write(SellThreshold);
+            }
+
+            public static MarketOrder Import(BinaryReader r, int saveVersion)
+            {
+                var order = new MarketOrder
+                {
+                    BuyThreshold = r.ReadInt32(),
+                    SellThreshold = r.ReadInt32(),
+                };
+
+                // In saves older than version 6 (specifically, version 5), there was a SellAmount integer here.
+                // We need to read it to advance the stream, but we don't use it.
+                if (saveVersion == 5)
+                {
+                    r.ReadInt32(); // Read and discard the old SellAmount
+                }
+
+                return order;
             }
         }
         #endregion
@@ -393,7 +440,7 @@ namespace NexusLogistics
             }
             if (showStorageGUI)
             {
-                storageWindowRect = GUI.Window(1, storageWindowRect, StorageWindowFunction, "Remote Storage Contents", windowStyle);
+                storageWindowRect = GUI.Window(1, storageWindowRect, StorageWindowFunction, "Logistics", windowStyle);
                 DrawWindowBorder(storageWindowRect);
             }
 
@@ -413,6 +460,143 @@ namespace NexusLogistics
             GUI.DrawTexture(new Rect(rect.x, rect.y + rect.height - 1, rect.width, 1), borderTexture); // Bottom
             GUI.DrawTexture(new Rect(rect.x, rect.y, 1, rect.height), borderTexture); // Left
             GUI.DrawTexture(new Rect(rect.x + rect.width - 1, rect.y, 1, rect.height), borderTexture); // Right
+        }
+
+        #endregion
+
+        #region Market Transaction Methods
+
+        private void BuyItem(int itemId, long price)
+        {
+            if (!marketQuantityInputs.TryGetValue(itemId, out string input) || !int.TryParse(input, out int quantity) || quantity <= 0)
+            {
+                return; // Invalid quantity
+            }
+
+            long totalCost = price * quantity;
+            int affordableQuantity = quantity;
+
+            if (totalCost > playerBalance)
+            {
+                affordableQuantity = (int)(playerBalance / price);
+            }
+
+            if (affordableQuantity <= 0)
+            {
+                return; // Can't afford any
+            }
+
+            long finalCost = price * affordableQuantity;
+            playerBalance -= finalCost;
+            AddItem(itemId, affordableQuantity, 0, true); // Bypass storage limit for purchases
+        }
+
+        private void SellItem(int itemId, long price)
+        {
+            if (!marketQuantityInputs.TryGetValue(itemId, out string input) || !int.TryParse(input, out int quantity) || quantity <= 0)
+            {
+                return; // Invalid quantity
+            }
+
+            int[] takenItems = TakeItem(itemId, quantity);
+            int soldQuantity = takenItems[0];
+
+            if (soldQuantity > 0)
+            {
+                playerBalance += price * soldQuantity;
+            }
+        }
+
+        private long GetSellPrice(int itemId)
+        {
+            if (itemPrices.TryGetValue(itemId, out long basePrice))
+            {
+                return basePrice / 5;
+            }
+            return 0;
+        }
+
+        private RecipeProto GetRecipe(int itemId)
+        {
+            return LDB.recipes.dataArray.FirstOrDefault(r => r.Results.Length > 0 && r.Results[0] == itemId);
+        }
+
+
+        private Dictionary<int, long> GenerateDefaultPrices()
+        {
+            var prices = new Dictionary<int, long>
+            {
+                // Raw Materials
+                { 1001, 10 }, // Iron Ore
+                { 1002, 10 }, // Copper Ore
+                { 1003, 20 }, // Silicon Ore
+                { 1004, 20 }, // Titanium Ore
+                { 1005, 30 }, // Stone
+                { 1006, 15 }, // Coal
+                { 1007, 25 }, // Crude Oil
+                { 1011, 100 }, // Fire Ice
+                { 1012, 100 }, // Kimberlite Ore
+                { 1013, 100 }, // Fractal Silicon
+                { 1014, 100 }, // Organic Crystal
+                { 1015, 150 }, // Optical Grating Crystal
+                { 1016, 200 }, // Spiniform Stalagmite Crystal
+                { 1017, 250 }, // Unipolar Magnet
+                { 1030, 5 }, // Wood
+                { 1031, 10 }, // Plant Fuel
+                { 1120, 30 }, // Hydrogen
+                { 1121, 60 }, // Deuterium
+                { 1122, 1000 }, // Antimatter
+            };
+
+            bool newPricesAdded;
+            do
+            {
+                newPricesAdded = false;
+                foreach (var item in allItemsForMarket)
+                {
+                    if (prices.ContainsKey(item.ID)) continue;
+
+                    var recipe = GetRecipe(item.ID);
+                    if (recipe == null) continue;
+
+                    long currentPrice = 0;
+                    bool allIngredientsPriced = true;
+                    for (int j = 0; j < recipe.Items.Length; j++)
+                    {
+                        if (prices.TryGetValue(recipe.Items[j], out long ingredientPrice))
+                        {
+                            currentPrice += ingredientPrice * recipe.ItemCounts[j];
+                        }
+                        else
+                        {
+                            allIngredientsPriced = false;
+                            break;
+                        }
+                    }
+
+                    if (allIngredientsPriced && currentPrice > 0)
+                    {
+                        double premium;
+                        int ingredientCount = recipe.Items.Length;
+                        if (ingredientCount <= 2)
+                        {
+                            premium = 0.6; // 60%
+                        }
+                        else if (ingredientCount <= 4)
+                        {
+                            premium = 0.8; // 80%
+                        }
+                        else
+                        {
+                            premium = 1.0; // 100%
+                        }
+                        prices[item.ID] = currentPrice + (long)(currentPrice * premium); // Tiered premium for crafting
+                        newPricesAdded = true;
+                    }
+                }
+            } while (newPricesAdded);
+
+            return prices;
         }
 
         #endregion
@@ -448,6 +632,9 @@ namespace NexusLogistics
         /// </summary>
         private void InitializeData()
         {
+            allItemsForMarket = LDB.items.dataArray.Where(p => p != null && p.ID > 0).ToList();
+            LoadItemPrices();
+
             fuelOptions.Add(0, "Auto");
             fuelOptions.Add(ItemIds.Coal, "Coal");
             fuelOptions.Add(ItemIds.Graphite, "Graphite");
@@ -475,6 +662,78 @@ namespace NexusLogistics
             ammos.Add(EAmmoType.Cannon, new List<int> { ItemIds.CrystalShellSet, ItemIds.HighExplosiveShellSet, ItemIds.ShellSet });
             ammos.Add(EAmmoType.Plasma, new List<int> { ItemIds.AntimatterCapsule, ItemIds.PlasmaCapsule });
             ammos.Add(EAmmoType.EMCapsule, new List<int> { ItemIds.SuppressionCapsule, ItemIds.JammingCapsule });
+        }
+
+        /// <summary>
+        /// Loads item prices from a custom configuration file, and adds any missing items from the default list.
+        /// </summary>
+        private void LoadItemPrices()
+        {
+            string configPath = Path.Combine(Paths.ConfigPath, "nexus-logistics-item-prices.cfg");
+            var defaultPrices = GenerateDefaultPrices();
+
+            // Load existing prices from the config file
+            if (File.Exists(configPath))
+            {
+                foreach (string line in File.ReadAllLines(configPath))
+                {
+                    if (line.StartsWith("#") || string.IsNullOrWhiteSpace(line)) continue;
+
+                    string[] parts = line.Split('#')[0].Split('=');
+                    if (parts.Length == 2)
+                    {
+                        if (int.TryParse(parts[0].Trim(), out int itemId) && long.TryParse(parts[1].Trim(), out long price))
+                        {
+                            if (!itemPrices.ContainsKey(itemId))
+                            {
+                                itemPrices.Add(itemId, price);
+                            }
+                            else
+                            {
+                                itemPrices[itemId] = price; // Overwrite with user's value
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Add missing default prices
+            bool needsSave = !File.Exists(configPath);
+            foreach (var defaultPrice in defaultPrices)
+            {
+                if (!itemPrices.ContainsKey(defaultPrice.Key))
+                {
+                    itemPrices.Add(defaultPrice.Key, defaultPrice.Value);
+                    needsSave = true;
+                }
+            }
+
+            // Save the updated file if new items were added or if the file didn't exist
+            if (needsSave)
+            {
+                try
+                {
+                    using (StreamWriter sw = new StreamWriter(configPath, false)) // Overwrite the file
+                    {
+                        sw.WriteLine("# This file contains the base prices for items in the market.");
+                        sw.WriteLine("# Format: ItemID = Price");
+                        sw.WriteLine("# You can modify these values. The mod will update this file with new items, but will preserve your custom prices.");
+
+                        // Write all items (user-modified and new defaults) to the file, sorted by ID
+                        foreach (var item in allItemsForMarket.OrderBy(i => i.ID))
+                        {
+                            if (itemPrices.TryGetValue(item.ID, out long price))
+                            {
+                                sw.WriteLine($"{item.ID} = {price} # {item.name}");
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError($"Failed to save item prices configuration: {ex}");
+                }
+            }
         }
 
         #endregion
@@ -531,6 +790,7 @@ namespace NexusLogistics
 
                         // Wait for all tasks to complete before starting the next tick.
                         Task.WhenAll(tasks).Wait();
+                        ProcessMarketOrders().Wait(); // Run this synchronously after all other item movements
                     }
                 }
                 catch (Exception ex)
@@ -568,86 +828,279 @@ namespace NexusLogistics
 
         void StorageWindowFunction(int windowID)
         {
-            string[] categories = { "Dashboard", "Raw", "Intermeds", "Buildings", "Combat", "Science" };
-            selectedStorageCategory = (StorageCategory)GUILayout.Toolbar((int)selectedStorageCategory, categories, toolbarStyle);
+            string[] categories = { "Dashboard", "Storage", "Market" };
+            var newCategory = (StorageCategory)GUILayout.Toolbar((int)selectedStorageCategory, categories, toolbarStyle);
+
+            if (newCategory != selectedStorageCategory)
+            {
+                selectedStorageCategory = newCategory;
+                // Reset sub-tabs when changing main tabs for a clean state
+                if (selectedStorageCategory == StorageCategory.Market)
+                {
+                    selectedItemCategory = ItemCategory.RawResources;
+                }
+                else if (selectedStorageCategory == StorageCategory.Storage)
+                {
+                    selectedItemCategory = ItemCategory.RawResources;
+                }
+            }
 
             if (selectedStorageCategory == StorageCategory.Dashboard)
             {
                 DashboardPanel();
             }
-            else
+            else if (selectedStorageCategory == StorageCategory.Market)
             {
+                MarketPanel();
+            }
+            else if (selectedStorageCategory == StorageCategory.Storage)
+            {
+                // Item Category Sub-Tabs
+                string[] itemCategories = { "Raw", "Intermeds", "Buildings", "Combat", "Science" };
+                selectedItemCategory = (ItemCategory)GUILayout.Toolbar((int)selectedItemCategory, itemCategories, toolbarStyle);
+
                 GUILayout.BeginVertical();
                 GUILayout.Space(5);
 
+                GUILayout.BeginHorizontal();
+                GUILayout.Label("Item Name", labelStyle, GUILayout.Width(150));
+                GUILayout.Label("Count", labelStyle, GUILayout.Width(100));
+                GUILayout.Label("Proliferation", labelStyle, GUILayout.Width(100));
+                GUILayout.Label("Limit", labelStyle, GUILayout.Width(100));
+                GUILayout.EndHorizontal();
+
+                storageScrollPosition = GUILayout.BeginScrollView(storageScrollPosition, scrollViewStyle);
+
+                var originalContentColor = GUI.contentColor;
+                try
+                {
+                    // Use the cached list for display to avoid locking during GUI rendering.
+                    foreach (var pair in storageItemsForGUI)
+                    {
+                        int itemId = pair.Key;
+                        RemoteStorageItem item = pair.Value;
+                        ItemProto itemProto = LDB.items.Select(itemId);
+                        string itemName = itemProto.name;
+
+                        if (!limitInputStrings.ContainsKey(itemId))
+                        {
+                            limitInputStrings[itemId] = item.limit.ToString();
+                        }
+
+                        GUILayout.BeginHorizontal();
+                        GUILayout.Label(itemName, labelStyle, GUILayout.Width(150));
+                        GUILayout.Label(item.count.ToString("N0"), labelStyle, GUILayout.Width(100));
+
+                        var (prolifText, prolifColor) = GetProliferationStatus(item.count, item.inc, itemId);
+                        GUI.contentColor = prolifColor;
+                        GUILayout.Label(prolifText, labelStyle, GUILayout.Width(100));
+                        GUI.contentColor = originalContentColor;
+
+                        string currentInput = limitInputStrings[itemId];
+                        string newInput = GUILayout.TextField(currentInput, textFieldStyle, GUILayout.Width(100));
+
+                        if (newInput != currentInput)
+                        {
+                            limitInputStrings[itemId] = newInput;
+                            if (int.TryParse(newInput, out int newLimit) && newLimit >= 0)
+                            {
+                                lock (remoteStorageLock)
+                                {
+                                    if (remoteStorage.ContainsKey(itemId))
+                                    {
+                                        remoteStorage[itemId].limit = newLimit;
+                                    }
+                                }
+                            }
+                        }
+                        GUILayout.EndHorizontal();
+                    }
+                }
+                catch (Exception e)
+                {
+                    GUI.contentColor = originalContentColor;
+                    GUILayout.Label("Error displaying storage: " + e.Message);
+                }
+                finally
+                {
+                    GUI.contentColor = originalContentColor;
+                }
+
+                GUILayout.EndScrollView();
+                GUILayout.EndVertical();
+            }
+            GUI.DragWindow();
+        }
+
+        void MarketPanel()
+        {
+            // Sub-tab toolbar for Main/Orders
+            string[] marketSubTabs = { "Main", "Orders" };
+            marketSubTab = GUILayout.Toolbar(marketSubTab, marketSubTabs, toolbarStyle);
+            GUILayout.Space(5);
+
+            // Item category sub-tabs
+            string[] itemCategories = { "Raw", "Intermeds", "Buildings", "Combat", "Science" };
+            selectedItemCategory = (ItemCategory)GUILayout.Toolbar((int)selectedItemCategory, itemCategories, toolbarStyle);
+            GUILayout.Space(10);
+
+            // Balance display moved here
+            GUILayout.Label($"Balance: ${playerBalance:N0}", labelStyle);
+            GUILayout.Space(10);
+
+
+            if (marketSubTab == 0) // 0 for Main
+            {
+                // Header
+                GUILayout.BeginHorizontal();
+                GUILayout.Label("Item", labelStyle, GUILayout.Width(150));
+                GUILayout.Label("In Storage", labelStyle, GUILayout.Width(100));
+                GUILayout.Label("Buy Price", labelStyle, GUILayout.Width(100));
+                GUILayout.Label("Sell Price", labelStyle, GUILayout.Width(100));
+                GUILayout.Label("Quantity", labelStyle, GUILayout.Width(100));
+                GUILayout.Label("Actions", labelStyle, GUILayout.Width(200));
+                GUILayout.EndHorizontal();
+
+                storageScrollPosition = GUILayout.BeginScrollView(storageScrollPosition, scrollViewStyle);
+
+                foreach (var itemProto in allItemsForMarket)
+                {
+                    // Filter by selected item category
+                    if (GetItemCategory(itemProto) != selectedItemCategory)
+                    {
+                        continue;
+                    }
+
+                    // Only show items that have a price and have been unlocked by the player
+                    if (!itemPrices.TryGetValue(itemProto.ID, out long basePrice) || !unlockedItems.Contains(itemProto.ID))
+                    {
+                        continue;
+                    }
+
+                    long sellPrice = GetSellPrice(itemProto.ID);
+
+                    int currentStock = 0;
+                    lock (remoteStorageLock)
+                    {
+                        if (remoteStorage.ContainsKey(itemProto.ID))
+                        {
+                            currentStock = remoteStorage[itemProto.ID].count;
+                        }
+                    }
+
+                    if (!marketQuantityInputs.ContainsKey(itemProto.ID))
+                    {
+                        marketQuantityInputs[itemProto.ID] = "1";
+                    }
+
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Label(itemProto.name, labelStyle, GUILayout.Width(150));
+                    GUILayout.Label(currentStock.ToString("N0"), labelStyle, GUILayout.Width(100));
+                    GUILayout.Label($"${basePrice:N0}", labelStyle, GUILayout.Width(100));
+                    GUILayout.Label($"${sellPrice:N0}", labelStyle, GUILayout.Width(100));
+
+                    string currentInput = marketQuantityInputs[itemProto.ID];
+                    string newInput = GUILayout.TextField(currentInput, textFieldStyle, GUILayout.Width(100));
+                    if (newInput != currentInput)
+                    {
+                        marketQuantityInputs[itemProto.ID] = newInput;
+                    }
+
+                    if (GUILayout.Button("Buy", buttonStyle, GUILayout.Width(80)))
+                    {
+                        BuyItem(itemProto.ID, basePrice);
+                    }
+                    if (GUILayout.Button("Sell", buttonStyle, GUILayout.Width(80)))
+                    {
+                        SellItem(itemProto.ID, sellPrice);
+                    }
+
+                    GUILayout.EndHorizontal();
+                }
+
+                GUILayout.EndScrollView();
+            }
+            else if (marketSubTab == 1) // 1 for Orders
+            {
+                MarketOrdersPanel();
+            }
+        }
+
+        void MarketOrdersPanel()
+        {
+            // Header
             GUILayout.BeginHorizontal();
-            GUILayout.Label("Item Name", labelStyle, GUILayout.Width(150));
-            GUILayout.Label("Count", labelStyle, GUILayout.Width(100));
-            GUILayout.Label("Proliferation", labelStyle, GUILayout.Width(100));
-            GUILayout.Label("Limit", labelStyle, GUILayout.Width(100));
+            GUILayout.Label("Item", labelStyle, GUILayout.Width(150));
+            GUILayout.Label("In Storage", labelStyle, GUILayout.Width(100));
+            GUILayout.Label("Buy Below", labelStyle, GUILayout.Width(100));
+            GUILayout.Label("Sell Above", labelStyle, GUILayout.Width(100));
             GUILayout.EndHorizontal();
 
             storageScrollPosition = GUILayout.BeginScrollView(storageScrollPosition, scrollViewStyle);
 
-            var originalContentColor = GUI.contentColor;
-            try
+            foreach (var itemProto in allItemsForMarket)
             {
-                // Use the cached list for display to avoid locking during GUI rendering.
-                foreach (var pair in storageItemsForGUI)
+                // Filter by selected item category
+                if (GetItemCategory(itemProto) != selectedItemCategory)
                 {
-                    int itemId = pair.Key;
-                    RemoteStorageItem item = pair.Value;
-                    ItemProto itemProto = LDB.items.Select(itemId);
-                    string itemName = itemProto.name;
+                    continue;
+                }
 
-                    if (!limitInputStrings.ContainsKey(itemId))
+                if (!unlockedItems.Contains(itemProto.ID))
+                {
+                    continue;
+                }
+
+                int itemId = itemProto.ID;
+                marketOrders.TryGetValue(itemId, out MarketOrder order);
+
+                // Initialize input strings if they don't exist
+                if (!buyThresholdInputs.ContainsKey(itemId)) buyThresholdInputs[itemId] = order?.BuyThreshold.ToString() ?? "0";
+                if (!sellThresholdInputs.ContainsKey(itemId)) sellThresholdInputs[itemId] = order?.SellThreshold.ToString() ?? "0";
+
+                int currentStock = 0;
+                lock (remoteStorageLock)
+                {
+                    if (remoteStorage.ContainsKey(itemId))
                     {
-                        limitInputStrings[itemId] = item.limit.ToString();
+                        currentStock = remoteStorage[itemId].count;
                     }
+                }
 
-                    GUILayout.BeginHorizontal();
-                    GUILayout.Label(itemName, labelStyle, GUILayout.Width(150));
-                    GUILayout.Label(item.count.ToString("N0"), labelStyle, GUILayout.Width(100));
+                GUILayout.BeginHorizontal();
+                GUILayout.Label(itemProto.name, labelStyle, GUILayout.Width(150));
+                GUILayout.Label(currentStock.ToString("N0"), labelStyle, GUILayout.Width(100));
 
-                    var (prolifText, prolifColor) = GetProliferationStatus(item.count, item.inc, itemId);
-                    GUI.contentColor = prolifColor;
-                    GUILayout.Label(prolifText, labelStyle, GUILayout.Width(100));
-                    GUI.contentColor = originalContentColor;
+                // Input fields
+                buyThresholdInputs[itemId] = GUILayout.TextField(buyThresholdInputs[itemId], textFieldStyle, GUILayout.Width(100));
+                sellThresholdInputs[itemId] = GUILayout.TextField(sellThresholdInputs[itemId], textFieldStyle, GUILayout.Width(100));
 
-                    string currentInput = limitInputStrings[itemId];
-                    string newInput = GUILayout.TextField(currentInput, textFieldStyle, GUILayout.Width(100));
-
-                    if (newInput != currentInput)
+                // Update logic
+                if (int.TryParse(buyThresholdInputs[itemId], out int buyThreshold) &&
+                    int.TryParse(sellThresholdInputs[itemId], out int sellThreshold))
+                {
+                    if (order == null)
                     {
-                        limitInputStrings[itemId] = newInput;
-                        if (int.TryParse(newInput, out int newLimit) && newLimit >= 0)
+                        if (buyThreshold > 0 || sellThreshold > 0)
                         {
-                            lock (remoteStorageLock)
-                            {
-                                if (remoteStorage.ContainsKey(itemId))
-                                {
-                                    remoteStorage[itemId].limit = newLimit;
-                                }
-                            }
+                            marketOrders[itemId] = new MarketOrder { BuyThreshold = buyThreshold, SellThreshold = sellThreshold };
                         }
                     }
-                    GUILayout.EndHorizontal();
+                    else
+                    {
+                        order.BuyThreshold = buyThreshold;
+                        order.SellThreshold = sellThreshold;
+                        if (buyThreshold == 0 && sellThreshold == 0)
+                        {
+                            marketOrders.Remove(itemId);
+                        }
+                    }
                 }
-            }
-            catch (Exception e)
-            {
-                GUI.contentColor = originalContentColor;
-                GUILayout.Label("Error displaying storage: " + e.Message);
-            }
-            finally
-            {
-                GUI.contentColor = originalContentColor;
+
+                GUILayout.EndHorizontal();
             }
 
             GUILayout.EndScrollView();
-            GUILayout.EndVertical();
-            }
-            GUI.DragWindow();
         }
 
         void DashboardPanel()
@@ -1369,6 +1822,74 @@ namespace NexusLogistics
             catch (Exception ex) { Logger.LogError(ex); }
         });
 
+        Task ProcessMarketOrders() => Task.Run(() =>
+        {
+            try
+            {
+                if (marketOrders.Count == 0) return;
+
+                var orders = new Dictionary<int, MarketOrder>(marketOrders);
+
+                foreach (var pair in orders)
+                {
+                    int itemId = pair.Key;
+                    MarketOrder order = pair.Value;
+
+                    int currentStock = 0;
+                    lock (remoteStorageLock)
+                    {
+                        if (remoteStorage.ContainsKey(itemId))
+                        {
+                            currentStock = remoteStorage[itemId].count;
+                        }
+                    }
+
+                    // Sell Logic
+                    if (order.SellThreshold > 0 && currentStock > order.SellThreshold)
+                    {
+                        long sellPrice = GetSellPrice(itemId);
+                        if (sellPrice > 0)
+                        {
+                            // "Sell" by removing items from storage.
+                            // Sell all items above the sell threshold.
+                            int amountToSell = currentStock - order.SellThreshold;
+                            int[] soldItems = TakeItem(itemId, amountToSell);
+                            int soldQuantity = soldItems[0];
+
+                            if (soldQuantity > 0)
+                            {
+                                long earnings = sellPrice * soldQuantity;
+                                Interlocked.Add(ref playerBalance, earnings);
+                            }
+                        }
+                    }
+
+                    // Buy Logic
+                    if (order.BuyThreshold > 0 && currentStock < order.BuyThreshold)
+                    {
+                        int amountToBuy = order.BuyThreshold - currentStock;
+                        if (amountToBuy > 0 && itemPrices.TryGetValue(itemId, out long basePrice) && basePrice > 0)
+                        {
+                            long currentBalance = Interlocked.Read(ref playerBalance);
+                            int affordableQuantity = amountToBuy;
+                            if (basePrice * affordableQuantity > currentBalance)
+                            {
+                                affordableQuantity = (int)(currentBalance / basePrice);
+                            }
+
+                            if (affordableQuantity > 0)
+                            {
+                                long finalCost = basePrice * affordableQuantity;
+                                Interlocked.Add(ref playerBalance, -finalCost);
+                                AddItem(itemId, affordableQuantity, 0, true); // Bypass limit to ensure it can be bought
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex) { Logger.LogError($"Error in ProcessMarketOrders: {ex}"); }
+        });
+
         Task ProcessPackage() => Task.Run(() =>
         {
             try
@@ -1480,9 +2001,9 @@ namespace NexusLogistics
                 if (!remoteStorage.ContainsKey(itemId))
                 {
                     ItemProto itemProto = LDB.items.Select(itemId);
-                    StorageCategory category = GetItemCategory(itemProto);
+                    ItemCategory category = GetItemCategory(itemProto);
                     int defaultLimit = 1000000;
-                    if (category == StorageCategory.BuildingsAndVehicles || category == StorageCategory.AmmunitionAndCombat)
+                    if (category == ItemCategory.BuildingsAndVehicles || category == ItemCategory.AmmunitionAndCombat)
                     {
                         defaultLimit = 1000;
                     }
@@ -1508,6 +2029,7 @@ namespace NexusLogistics
 
                 if (amountToAdd > 0)
                 {
+                    unlockedItems.Add(itemId);
                     RecordAdd(itemId, amountToAdd);
                 }
 
@@ -1690,14 +2212,14 @@ namespace NexusLogistics
             else if (GameMain.history.TechUnlocked(3509)) GameMain.history.remoteStationExtraStorage = 15000;
         }
 
-        private StorageCategory GetItemCategory(ItemProto itemProto)
+        private ItemCategory GetItemCategory(ItemProto itemProto)
         {
-            if (itemProto == null) return StorageCategory.IntermediateProducts;
-            if (itemProto.ID >= 6001 && itemProto.ID <= 6006) return StorageCategory.ScienceMatrices;
-            if (itemProto.isAmmo || itemProto.isFighter) return StorageCategory.AmmunitionAndCombat;
-            if (itemProto.CanBuild) return StorageCategory.BuildingsAndVehicles;
-            if (IsVein(itemProto.ID)) return StorageCategory.RawResources;
-            return StorageCategory.IntermediateProducts;
+            if (itemProto == null) return ItemCategory.IntermediateProducts;
+            if (itemProto.ID >= 6001 && itemProto.ID <= 6006) return ItemCategory.ScienceMatrices;
+            if (itemProto.isAmmo || itemProto.isFighter) return ItemCategory.AmmunitionAndCombat;
+            if (itemProto.CanBuild) return ItemCategory.BuildingsAndVehicles;
+            if (IsVein(itemProto.ID)) return ItemCategory.RawResources;
+            return ItemCategory.IntermediateProducts;
         }
 
         private (string text, Color color) GetProliferationStatus(int count, int inc, int itemId)
@@ -1738,6 +2260,13 @@ namespace NexusLogistics
 
         private void RefreshStorageItemsForGUI()
         {
+            // Only populate the list if the Storage tab is active.
+            if (selectedStorageCategory != StorageCategory.Storage)
+            {
+                storageItemsForGUI.Clear();
+                return;
+            }
+
             lock (remoteStorageLock)
             {
                 storageItemsForGUI = remoteStorage
@@ -1745,7 +2274,7 @@ namespace NexusLogistics
                     {
                         if (pair.Value.count <= 0) return false;
                         ItemProto itemProto = LDB.items.Select(pair.Key);
-                        return itemProto != null && GetItemCategory(itemProto) == selectedStorageCategory;
+                        return itemProto != null && GetItemCategory(itemProto) == selectedItemCategory;
                     })
                     .OrderBy(item => LDB.items.Select(item.Key)?.name ?? string.Empty)
                     .ToList();
@@ -1766,6 +2295,21 @@ namespace NexusLogistics
         public void Export(BinaryWriter w)
         {
             w.Write(SAVE_VERSION);
+            w.Write(playerBalance);
+
+            w.Write(unlockedItems.Count);
+            foreach (int itemId in unlockedItems)
+            {
+                w.Write(itemId);
+            }
+
+            w.Write(marketOrders.Count);
+            foreach (var order in marketOrders)
+            {
+                w.Write(order.Key);
+                order.Value.Export(w);
+            }
+
             lock (remoteStorageLock)
             {
                 w.Write(remoteStorage.Count);
@@ -1782,6 +2326,36 @@ namespace NexusLogistics
             int version = r.ReadInt32();
             if (version > SAVE_VERSION) return;
 
+            if (version >= 3)
+            {
+                playerBalance = r.ReadInt64();
+            }
+            else
+            {
+                playerBalance = 0;
+            }
+
+            unlockedItems.Clear();
+            if (version >= 4)
+            {
+                int unlockedCount = r.ReadInt32();
+                for (int i = 0; i < unlockedCount; i++)
+                {
+                    unlockedItems.Add(r.ReadInt32());
+                }
+            }
+
+            marketOrders.Clear();
+            if (version >= 5)
+            {
+                int marketOrderCount = r.ReadInt32();
+                for (int i = 0; i < marketOrderCount; i++)
+                {
+                    int itemId = r.ReadInt32();
+                    marketOrders[itemId] = MarketOrder.Import(r, version);
+                }
+            }
+
             lock (remoteStorageLock)
             {
                 remoteStorage.Clear();
@@ -1796,6 +2370,9 @@ namespace NexusLogistics
 
         public void IntoOtherSave()
         {
+            playerBalance = 0;
+            unlockedItems.Clear();
+            marketOrders.Clear();
             lock (remoteStorageLock)
             {
                 remoteStorage.Clear();
@@ -1804,3 +2381,5 @@ namespace NexusLogistics
         #endregion
     }
 }
+
+

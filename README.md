@@ -1,6 +1,6 @@
 # NexusLogistics for Dyson Sphere Program
 
-**Version:** 1.6.0
+**Version:** 1.7.0
 
 An unofficial update and feature-rich continuation of the original **PackageLogistic** mod by `qlvlp-com`. NexusLogistics provides a centralized, "magic" logistics network that dramatically simplifies resource management across your entire star cluster, allowing you to focus on designing and expanding your factory.
 
@@ -27,22 +27,23 @@ This mod is built upon the foundation of the PackageLogistic mod by qlvlp-com. A
 
 NexusLogistics creates a global, invisible storage network that acts as a central hub for all your resources. Here's the basic concept:
 
-* **Producers Add to the Network:** Any building that generates items (like Miners, Smelters, Assemblers, and Logistics Stations set to "Supply") will automatically add their output to the central "Nexus" storage.
-* **Consumers Take from the Network:** Any building that requires items (like Assemblers, Labs, Power Plants, Turrets, and Logistics Stations set to "Demand") will automatically draw what they need from the Nexus.
-* **It's All Connected:** This happens instantaneously and across any distance, without the need for logistics vessels for the items managed by this mod. Your entire industrial empire is treated as one interconnected inventory.
+*   **Producers Add to the Network:** Any building that generates items (like Miners, Smelters, Assemblers, and Logistics Stations set to "Supply") will automatically add their output to the central "Nexus" storage.
+*   **Consumers Take from the Network:** Any building that requires items (like Assemblers, Labs, Power Plants, Turrets, and Logistics Stations set to "Demand") will automatically draw what they need from the Nexus.
+*   **It's All Connected:** This happens instantaneously and across any distance, without the need for logistics vessels for the items managed by this mod. Your entire industrial empire is treated as one interconnected inventory.
 
 ## Key Features
 
-* **Central Remote Storage:** All items supplied by logistics stations, storage boxes, and miners are pooled into a central "nexus" storage.
-* **Automatic Supply Network:** Buildings that require items (Assemblers, Labs, Power Plants, Turrets, etc.) will automatically draw what they need from the nexus.
-* **Personal Logistics:** Automatically replenishes filtered items in your main inventory and fills requests in your personal logistics slots.
-* **Automatic Proliferation:** Items added to the network can be automatically sprayed with Proliferator MK.I, II, or III. This can be toggled to consume proliferator points or be free.
-* **Item Limit Control:** A new UI allows you to set a storage limit for every item in the network, preventing overproduction of specific resources.
-* **"Infinite" Cheats:** Optional toggles for infinite items, minerals, buildings, soil pile, ammo, and fleet units.
-* **Revamped GUI:** A complete visual overhaul of the UI to match the aesthetic of the base game, featuring a semi-transparent, sci-fi theme and a more readable font.
-* **Logistics Dashboard:** A new "Dashboard" tab in the Remote Storage window provides at-a-glance statistics about your logistics network, helping you identify bottlenecks before they become critical.
-    * **Bottleneck Detection:** The dashboard intelligently tracks item consumption versus production over time. If an item is being used faster than it's being supplied, it will be listed as a bottleneck.
-    * **Time to Depletion:** Alongside the deficit-per-minute, the dashboard shows an estimated "Time to Depletion" (ETA), telling you exactly how urgent a shortfall is.
+*   **Central Remote Storage:** All items supplied by logistics stations, storage boxes, and miners are pooled into a central "nexus" storage.
+*   **Galactic Market:** A new "Market" tab allows you to buy and sell resources, providing a dynamic way to manage surpluses and acquire missing items.
+*   **Automatic Supply Network:** Buildings that require items (Assemblers, Labs, Power Plants, Turrets, etc.) will automatically draw what they need from the nexus.
+*   **Personal Logistics:** Automatically replenishes filtered items in your main inventory and fills requests in your personal logistics slots.
+*   **Automatic Proliferation:** Items added to the network can be automatically sprayed with Proliferator MK.I, II, or III. This can be toggled to consume proliferator points or be free.
+*   **Item Limit Control:** A new UI allows you to set a storage limit for every item in the network, preventing overproduction of specific resources.
+*   **"Infinite" Cheats:** Optional toggles for infinite items, minerals, buildings, soil pile, ammo, and fleet units.
+*   **Revamped GUI:** A complete visual overhaul of the UI to match the aesthetic of the base game, featuring a semi-transparent, sci-fi theme and a more readable font.
+*   **Logistics Dashboard:** A "Dashboard" tab provides at-a-glance statistics about your logistics network, helping you identify bottlenecks before they become critical.
+    *   **Bottleneck Detection:** The dashboard intelligently tracks item consumption versus production over time. If an item is being used faster than it's being supplied, it will be listed as a bottleneck.
+    *   **Time to Depletion:** Alongside the deficit-per-minute, the dashboard shows an estimated "Time to Depletion" (ETA), telling you exactly how urgent a shortfall is.
 
 ## Installation
 
@@ -60,39 +61,66 @@ This mod requires the following to be installed first:
 
 Once in-game, you can use the following hotkeys to access the mod's features.
 
-* **Toggle Main Window:** `LeftControl + R`
-    * This window contains the main toggles for enabling the mod, auto-replenishment, auto-spraying, and cheat options.
-* **Toggle Storage Window:** `LeftShift + R`
-    * This window shows you the current contents of your central remote storage. You can browse items by category (Raw, Intermediates, Buildings, etc.).
-    * **Set Item Limits:** In this window, you can click on the number in the "Limit" column for any item and type a new value to cap how much of that item the network will store.
+*   **Toggle Main Options Window:** `LeftControl + R`
+    *   This window contains the main toggles for enabling the mod, auto-replenishment, auto-spraying, and cheat options.
+*   **Toggle Logistics Window:** `LeftShift + R`
+    *   This is the main hub for your logistics network, containing the Dashboard, Storage, and Market tabs.
 
-### UI Panels Explained
+### Logistics Window Tabs Explained
+
+The main Logistics Window (`LeftShift + R`) is organized into three tabs:
+
+#### Dashboard Tab
+
+This tab provides actionable insights into the health of your logistics network. It is designed to help you spot and fix supply chain problems before they cause a shutdown.
+
+*   **Bottleneck Detection:** Identifies items where consumption is consistently higher than production over the last 5 minutes.
+*   **Time to Depletion:** For each bottlenecked item, the UI displays an estimated "Time to Depletion," helping you prioritize which shortages to address first.
+
+#### Storage Tab
+
+This tab shows you the current contents of your central remote storage.
+
+*   **Browse Items:** You can browse items by category (Raw, Intermediates, Buildings, etc.) using the sub-tabs.
+*   **Set Item Limits:** Click on the number in the "Limit" column for any item and type a new value to cap how much of that item the network will store.
+
+#### Market Tab
+
+This tab allows you to buy and sell items on a galactic market.
+
+*   **Nested Categories:** The market features nested sub-tabs. First select a primary category (e.g., "Resources"), then a more specific sub-category (e.g., "Raw Materials," "Intermediate Products") to find the items you want to trade.
+*   **Place Orders:** You can place buy and sell orders for items, which will be fulfilled over time.
+*   **View Balance:** Your current credit balance is displayed at the top of this panel.
+
+### Main Options Window Panels
+
+The Main Options Window (`LeftControl + R`) contains global settings and cheats.
 
 #### Main Options Panel
 
-* **Enable Mod:** The master switch for the entire mod.
-* **Auto Replenish:** Automatically replenishes items in your inventory that have a filter set (middle-click a slot to set a filter).
-* **Auto Spray:** Enables automatic proliferation of items in the network.
-    * **Consume Proliferator:** If checked, this will consume proliferator points from the sprayers you have in the network. If unchecked, proliferation is free.
-* **Recover from storage boxes/tanks:** When enabled, the mod will pull items from standard storage containers and liquid tanks into the network.
-* **Auto-Replenish Thermal Power Plant Fuel:** Automatically supplies fuel to your thermal power plants. You can select a specific fuel type or leave it on "Auto" to let the mod intelligently choose based on your resource reserves.
+*   **Enable Mod:** The master switch for the entire mod.
+*   **Auto Replenish:** Automatically replenishes items in your inventory that have a filter set (middle-click a slot to set a filter).
+*   **Auto Spray:** Enables automatic proliferation of items in the network.
+    *   **Consume Proliferator:** If checked, this will consume proliferator points from the sprayers you have in the network. If unchecked, proliferation is free.
+*   **Recover from storage boxes/tanks:** When enabled, the mod will pull items from standard storage containers and liquid tanks into the network.
+*   **Auto-Replenish Thermal Power Plant Fuel:** Automatically supplies fuel to your thermal power plants. You can select a specific fuel type or leave it on "Auto" to let the mod intelligently choose based on your resource reserves.
 
 #### Items Panel
 
 Contains the "infinite" resource toggles. Useful for testing or sandbox-style gameplay.
 
-* **Infinite Buildings**
-* **Infinite Minerals**
-* **Infinite Items**
-* **Infinite Soil Pile**
+*   **Infinite Buildings**
+*   **Infinite Minerals**
+*   **Infinite Items**
+*   **Infinite Soil Pile**
 
 #### Combat Panel
 
 Contains "infinite" toggles for military supplies and a utility button.
 
-* **Infinite Ammo**
-* **Infinite Fleet**
-* **Clear Battlefield Analysis Base:** Removes items from Battlefield Analysis Bases that you have marked to not be picked up, keeping their storage clean.
+*   **Infinite Ammo**
+*   **Infinite Fleet**
+*   **Clear Battlefield Analysis Base:** Removes items from Battlefield Analysis Bases that you have marked to not be picked up, keeping their storage clean.
 
 ## Building from Source (Optional)
 
@@ -104,6 +132,12 @@ If you wish to build the mod yourself:
 4.  Build the solution. The `NexusLogistics.dll` will be generated in the `bin/Debug` or `bin/Release` folder.
 
 ## Changelog
+
+### Version 1.7.0
+* **Feature: Market System:** Introduced a fully functional market system allowing players to buy and sell items.
+* **UI Refactor: Main Logistics Window:** The main window (`LeftShift+R`) has been completely redesigned and renamed to the "Logistics" window.
+    * **Tabbed Layout:** The window now features a main tab bar with "Dashboard," "Storage," and "Market" sections for improved navigation.
+    * **Nested Categories:** Both the Storage and Market tabs now use nested sub-tabs, allowing users to first select a primary category (e.g., "Resources") and then a more specific sub-category (e.g., "Raw Materials," "Intermediate Products").
 
 ### Version 1.6.0
 * **Feature: Logistics Dashboard:** Added a new "Dashboard" tab to the Remote Storage window to provide actionable insights into the logistics network.
