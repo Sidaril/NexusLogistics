@@ -93,7 +93,7 @@ namespace NexusLogistics
         #region Constants and Fields
         public const string GUID = "com.Sidaril.dsp.NexusLogistics";
         public const string NAME = "NexusLogistics";
-        public const string VERSION = "1.6.0";
+        public const string VERSION = "1.8.0";
 
         private const int SAVE_VERSION = 6;
 
@@ -121,7 +121,7 @@ namespace NexusLogistics
 
         // Configuration Entries
         private ConfigEntry<bool> autoSpray, costProliferator, infVeins, infItems, infSand, infBuildings, useStorege, autoCleanInventory;
-        private ConfigEntry<bool> enableMod, autoReplenishPackage, autoReplenishTPPFuel, infFleet, infAmmo;
+        private ConfigEntry<bool> enableMod, autoReplenishPackage, autoReplenishTPPFuel, autoReplenishFPPFuel, infFleet, infAmmo;
         private ConfigEntry<KeyboardShortcut> hotKey, storageHotKey;
         private ConfigEntry<ProliferatorSelection> proliferatorSelection;
         private ConfigEntry<int> fuelId;
@@ -146,6 +146,19 @@ namespace NexusLogistics
         private StorageCategory selectedStorageCategory = StorageCategory.Dashboard;
         private ItemCategory selectedItemCategory = ItemCategory.RawResources;
         private readonly Dictionary<int, string> limitInputStrings = new Dictionary<int, string>();
+        private readonly List<int> thermalFuelsByPriority = new List<int>
+        {
+            ItemIds.HydrogenFuelRod,
+            ItemIds.EnergyShard,
+            ItemIds.CombustionUnit,
+            ItemIds.FireIce,
+            ItemIds.Graphite,
+            ItemIds.RefinedOil,
+            ItemIds.Hydrogen,
+            ItemIds.Coal,
+            ItemIds.PlantFuel,
+            ItemIds.Wood
+        };
         private List<KeyValuePair<int, RemoteStorageItem>> storageItemsForGUI = new List<KeyValuePair<int, RemoteStorageItem>>();
 
         // Dashboard Data Cache
@@ -622,6 +635,7 @@ namespace NexusLogistics
             infSand = Config.Bind("Configuration", "InfSand", false, "Infinite Soil Pile. Soil pile quantity is infinite (fixed at 1G)");
             useStorege = Config.Bind("Configuration", "useStorege", true, "Recover items from storage boxes and liquid tanks");
             autoReplenishTPPFuel = Config.Bind("Configuration", "autoReplenishTPPFuel", true, "Automatically replenish fuel for thermal power plants");
+            autoReplenishFPPFuel = Config.Bind("Configuration", "autoReplenishFPPFuel", true, "Automatically replenish fuel for fusion power plants");
             fuelId = Config.Bind("Configuration", "fuelId", 0, "Thermal Power Plant Fuel ID\n0: Auto-select...");
             infAmmo = Config.Bind("Configuration", "InfAmmo", false, "Infinite Ammo. Ammo in the logistics backpack and interstellar logistics stations have infinite quantity");
             infFleet = Config.Bind("Configuration", "infFleet", false, "Infinite Fleet. Drones and warships in the logistics backpack and interstellar logistics stations have infinite quantity");
@@ -1243,6 +1257,7 @@ namespace NexusLogistics
                 selectedFuelIndex = GUILayout.SelectionGrid(selectedFuelIndex, fuelOptions.Values.ToArray(), 3, toggleStyle);
                 fuelId.Value = fuelOptions.Keys.ToArray()[selectedFuelIndex];
             }
+            autoReplenishFPPFuel.Value = GUILayout.Toggle(autoReplenishFPPFuel.Value, "Auto-refuel Fusion Power Plants", toggleStyle);
 
             GUILayout.EndVertical();
             GUILayout.EndScrollView();
@@ -1557,6 +1572,13 @@ namespace NexusLogistics
         {
             try
             {
+                // *** OPTIMIZATION: Determine best fuel ONCE per tick ***
+                int bestThermalFuel = 0;
+                if (autoReplenishTPPFuel.Value)
+                {
+                    bestThermalFuel = GetBestThermalFuel();
+                }
+
                 foreach (var pf in GameMain.data.factories)
                 {
                     if (pf == null) continue;
@@ -1564,6 +1586,7 @@ namespace NexusLogistics
                     {
                         PowerGeneratorComponent pgc = pf.powerSystem.genPool[i];
                         if (pgc.id <= 0) continue;
+
                         if (pgc.gamma) // Artificial Sun
                         {
                             if (pgc.catalystPoint + pgc.catalystIncPoint < 3600)
@@ -1587,17 +1610,40 @@ namespace NexusLogistics
                         int fuelToUse = 0;
                         switch (pgc.fuelMask)
                         {
-                            case 1: if (autoReplenishTPPFuel.Value) fuelToUse = GetBestThermalFuel(); break;
-                            case 2: fuelToUse = ItemIds.AntimatterFuelRod; break;
-                            case 4: fuelToUse = TakeItem(ItemIds.StrangeAnnihilationFuelRod, 1)[0] > 0 ? ItemIds.StrangeAnnihilationFuelRod : ItemIds.DeuteronFuelRod; break;
+                            case 1: // Thermal Power Station
+                                fuelToUse = bestThermalFuel;
+                                break;
+                            case 2: // Artificial Star
+                                if (autoReplenishFPPFuel.Value)
+                                {
+                                    if (HasItem(ItemIds.StrangeAnnihilationFuelRod))
+                                    {
+                                        fuelToUse = ItemIds.StrangeAnnihilationFuelRod;
+                                    }
+                                    else if (HasItem(ItemIds.AntimatterFuelRod))
+                                    {
+                                        fuelToUse = ItemIds.AntimatterFuelRod;
+                                    }
+                                }
+                                break;
+                            case 4: // Mini Fusion Power Station
+                                if (autoReplenishFPPFuel.Value && HasItem(ItemIds.DeuteronFuelRod))
+                                {
+                                    fuelToUse = ItemIds.DeuteronFuelRod;
+                                }
+                                break;
                         }
 
                         if (fuelToUse == 0) continue;
 
+                        // This logic correctly waits for the current fuel to run out before switching to a new (better) one.
                         if (fuelToUse != pgc.fuelId && pgc.fuelCount == 0)
                         {
                             int[] result = TakeItem(fuelToUse, 5);
-                            pf.powerSystem.genPool[i].SetNewFuel(fuelToUse, (short)result[0], (short)result[1]);
+                            if (result[0] > 0)
+                            {
+                                pf.powerSystem.genPool[i].SetNewFuel(fuelToUse, (short)result[0], (short)result[1]);
+                            }
                         }
                         else if (fuelToUse == pgc.fuelId && pgc.fuelCount < 5)
                         {
@@ -2133,17 +2179,56 @@ namespace NexusLogistics
             return items.Contains(itemId) || LDB.veins.GetVeinTypeByItemId(itemId) != EVeinType.None;
         }
 
-        int GetBestThermalFuel()
+        /// <summary>
+        /// Checks if a given quantity of an item is available in remote storage without consuming it.
+        /// </summary>
+        bool HasItem(int itemId, int count = 1)
         {
-            if (fuelId.Value != 0 && TakeItem(fuelId.Value, 1)[0] > 0)
+            if (itemId <= 0 || count <= 0) return false;
+
+            ItemProto item = LDB.items.Select(itemId);
+            bool isInfinite = (infItems.Value) ||
+                              (infVeins.Value && IsVein(itemId)) ||
+                              (infBuildings.Value && item.CanBuild) ||
+                              (infAmmo.Value && item.isAmmo) ||
+                              (infFleet.Value && item.isFighter);
+
+            if (isInfinite)
             {
-                return fuelId.Value;
+                return true;
             }
 
-            // Fallback logic if preferred fuel is unavailable or not set
-            if (TakeItem(ItemIds.RefinedOil, 1)[0] > 0) return ItemIds.RefinedOil;
-            if (TakeItem(ItemIds.Hydrogen, 1)[0] > 0) return ItemIds.Hydrogen;
-            if (TakeItem(ItemIds.Coal, 1)[0] > 0) return ItemIds.Coal;
+            lock (remoteStorageLock)
+            {
+                if (remoteStorage.ContainsKey(itemId))
+                {
+                    return remoteStorage[itemId].count >= count;
+                }
+            }
+            return false;
+        }
+
+        int GetBestThermalFuel()
+        {
+            // 1. Check for user's preferred fuel first.
+            if (fuelId.Value != 0)
+            {
+                if (HasItem(fuelId.Value))
+                {
+                    return fuelId.Value;
+                }
+                // If preferred fuel is set but unavailable, do not fall back. Wait for it.
+                return 0;
+            }
+
+            // 2. If no preferred fuel ("Auto" mode), iterate through the priority list.
+            foreach (int fuel in thermalFuelsByPriority)
+            {
+                if (HasItem(fuel))
+                {
+                    return fuel;
+                }
+            }
 
             return 0;
         }

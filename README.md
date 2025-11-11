@@ -1,6 +1,6 @@
 # NexusLogistics for Dyson Sphere Program
 
-**Version:** 1.7.0
+**Version:** 1.8.0
 
 An unofficial update and feature-rich continuation of the original **PackageLogistic** mod by `qlvlp-com`. NexusLogistics provides a centralized, "magic" logistics network that dramatically simplifies resource management across your entire star cluster, allowing you to focus on designing and expanding your factory.
 
@@ -104,6 +104,7 @@ The Main Options Window (`LeftControl + R`) contains global settings and cheats.
     *   **Consume Proliferator:** If checked, this will consume proliferator points from the sprayers you have in the network. If unchecked, proliferation is free.
 *   **Recover from storage boxes/tanks:** When enabled, the mod will pull items from standard storage containers and liquid tanks into the network.
 *   **Auto-Replenish Thermal Power Plant Fuel:** Automatically supplies fuel to your thermal power plants. You can select a specific fuel type or leave it on "Auto" to let the mod intelligently choose based on your resource reserves.
+*   **Auto-refuel Fusion Power Plants:** Automatically supplies Deuteron Fuel Rods to your Mini Fusion Power Plants and the best available Antimatter rods to your Artificial Stars.
 
 #### Items Panel
 
@@ -132,6 +133,13 @@ If you wish to build the mod yourself:
 4.  Build the solution. The `NexusLogistics.dll` will be generated in the `bin/Debug` or `bin/Release` folder.
 
 ## Changelog
+
+### Version 1.8.0
+* **Feature: Fusion Power Auto-Fueling:** Added a new toggleable option to automatically refuel Mini Fusion Power Plants with Deuteron Fuel Rods.
+* **Fix: Power Plant Logic:** Corrected the internal identifiers for all power plants. This fixes a bug where Mini Fusion Power Plants were not being refueled and ensures Artificial Stars are correctly refueled with the best available Antimatter Fuel Rods.
+* **Fix: Smart Fuel Switching:** Power plants will now correctly burn through their existing, lower-tier fuel before being resupplied with a newly-available, higher-tier fuel.
+* **Fix: Wasteful Fuel Check:** The logic for checking fuel availability no longer consumes one unit of fuel for every check, preventing a significant drain on resources.
+* **Optimization:** The power plant processing logic has been made more efficient by checking for the best available fuel only once per cycle, instead of for every single power plant.
 
 ### Version 1.7.0
 * **Feature: Market System:** Introduced a fully functional market system allowing players to buy and sell items.
