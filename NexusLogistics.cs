@@ -93,16 +93,16 @@ namespace NexusLogistics
         #region Constants and Fields
         public const string GUID = "com.Sidaril.dsp.NexusLogistics";
         public const string NAME = "NexusLogistics";
-        public const string VERSION = "1.8.0";
+        public const string VERSION = "1.9.0";
 
-        private const int SAVE_VERSION = 6;
+        private const int SAVE_VERSION = 7;
 
         // Player Data
         private long playerBalance = 0;
         private readonly HashSet<int> unlockedItems = new HashSet<int>();
 
         private enum ProliferatorSelection { All, Mk1, Mk2, Mk3 }
-        private enum StorageCategory { Dashboard, Storage, Market }
+        private enum StorageCategory { Dashboard, Storage, Market, Contracts }
 
         // Market Data
         private readonly Dictionary<int, long> itemPrices = new Dictionary<int, long>();
@@ -115,6 +115,11 @@ namespace NexusLogistics
         private readonly Dictionary<int, string> buyThresholdInputs = new Dictionary<int, string>();
         private readonly Dictionary<int, string> sellThresholdInputs = new Dictionary<int, string>();
 
+        // Automated Trade Route Data
+        private int tradeRoutesTier1 = 0;
+        private int tradeRoutesTier2 = 0;
+        private int tradeRoutesTier3 = 0;
+
         // Remote Storage Data
         private readonly Dictionary<int, RemoteStorageItem> remoteStorage = new Dictionary<int, RemoteStorageItem>();
         private readonly object remoteStorageLock = new object();
@@ -125,6 +130,7 @@ namespace NexusLogistics
         private ConfigEntry<KeyboardShortcut> hotKey, storageHotKey;
         private ConfigEntry<ProliferatorSelection> proliferatorSelection;
         private ConfigEntry<int> fuelId;
+        private ConfigEntry<int> starFuelId;
 
         // Proliferation and Item Data
         private readonly List<(int, int)> proliferators = new List<(int, int)>();
@@ -140,9 +146,12 @@ namespace NexusLogistics
         private Rect storageWindowRect = new Rect(100, 250, 900, 500);
         private Vector2 storageScrollPosition, mainPanelScrollPosition;
         private int selectedPanel = 0;
-        private readonly Dictionary<int, string> fuelOptions = new Dictionary<int, string>();
-        private int selectedFuelIndex;
-        private enum ItemCategory { RawResources, IntermediateProducts, BuildingsAndVehicles, AmmunitionAndCombat, ScienceMatrices }
+                private readonly Dictionary<int, string> fuelOptions = new Dictionary<int, string>();
+                private readonly Dictionary<int, string> starFuelOptions = new Dictionary<int, string>();
+                private int selectedFuelIndex;
+                private int selectedStarFuelIndex;
+        
+                private enum ItemCategory { RawResources, IntermediateProducts, BuildingsAndVehicles, AmmunitionAndCombat, ScienceMatrices }
         private StorageCategory selectedStorageCategory = StorageCategory.Dashboard;
         private ItemCategory selectedItemCategory = ItemCategory.RawResources;
         private readonly Dictionary<int, string> limitInputStrings = new Dictionary<int, string>();
@@ -160,6 +169,17 @@ namespace NexusLogistics
             ItemIds.Wood
         };
         private List<KeyValuePair<int, RemoteStorageItem>> storageItemsForGUI = new List<KeyValuePair<int, RemoteStorageItem>>();
+        private List<ItemProto> marketItemsForGUI = new List<ItemProto>();
+        private float marketGUIRefreshTimer = 0f;
+        private const float MarketGUIRefreshInterval = 0.25f; // 4 times per second
+        private ItemCategory lastMarketItemCategory = (ItemCategory)(-1); // Invalid category to force initial refresh
+
+        private static readonly (string Name, double MinPoints, Color Color)[] proliferationTiers = {
+            ("Mk 3", 4.0, new Color(0.6f, 0.7f, 1f)),
+            ("Mk 2", 2.0, new Color(0.6f, 1f, 0.6f)),
+            ("Mk 1", 1.0, new Color(1f, 0.75f, 0.5f)),
+            ("None", 0.0, Color.grey)
+        };
 
         // Dashboard Data Cache
         private struct BottleneckInfo
@@ -171,6 +191,8 @@ namespace NexusLogistics
         private List<BottleneckInfo> cachedBottlenecks = new List<BottleneckInfo>();
         private float dashboardRefreshTimer = 0f;
         private const float DashboardRefreshInterval = 1.0f; // 1 second
+        private float storageGUIRefreshTimer = 0f;
+        private const float StorageGUIRefreshInterval = 0.25f; // 4 times per second
         private Dictionary<int, int> bottleneckCounters = new Dictionary<int, int>();
         private const int BottleneckPersistenceThreshold = 3; // 3 seconds
 
@@ -243,6 +265,8 @@ namespace NexusLogistics
         {
             public readonly Queue<DataPoint> AddedHistory = new Queue<DataPoint>();
             public readonly Queue<DataPoint> TakenHistory = new Queue<DataPoint>();
+            public int TotalAddedInWindow = 0;
+            public int TotalTakenInWindow = 0;
         }
 
         private struct DataPoint
@@ -353,10 +377,25 @@ namespace NexusLogistics
 
         void Update()
         {
-            // Continuously update the item list if the storage window is open to reflect real-time changes.
+            // Periodically update the item list if the storage window is open.
             if (showStorageGUI)
             {
-                RefreshStorageItemsForGUI();
+                storageGUIRefreshTimer += Time.deltaTime;
+                if (storageGUIRefreshTimer >= StorageGUIRefreshInterval)
+                {
+                    storageGUIRefreshTimer = 0f;
+                    RefreshStorageItemsForGUI();
+                }
+
+                if (selectedStorageCategory == StorageCategory.Market)
+                {
+                    marketGUIRefreshTimer += Time.deltaTime;
+                    if (marketGUIRefreshTimer >= MarketGUIRefreshInterval)
+                    {
+                        marketGUIRefreshTimer = 0f;
+                        RefreshMarketItemsForGUI();
+                    }
+                }
             }
 
             // Refresh dashboard data periodically
@@ -539,75 +578,92 @@ namespace NexusLogistics
         {
             var prices = new Dictionary<int, long>
             {
-                // Raw Materials
-                { 1001, 10 }, // Iron Ore
-                { 1002, 10 }, // Copper Ore
-                { 1003, 20 }, // Silicon Ore
-                { 1004, 20 }, // Titanium Ore
-                { 1005, 30 }, // Stone
-                { 1006, 15 }, // Coal
-                { 1007, 25 }, // Crude Oil
-                { 1011, 100 }, // Fire Ice
-                { 1012, 100 }, // Kimberlite Ore
-                { 1013, 100 }, // Fractal Silicon
-                { 1014, 100 }, // Organic Crystal
-                { 1015, 150 }, // Optical Grating Crystal
-                { 1016, 200 }, // Spiniform Stalagmite Crystal
-                { 1017, 250 }, // Unipolar Magnet
-                { 1030, 5 }, // Wood
-                { 1031, 10 }, // Plant Fuel
-                { 1120, 30 }, // Hydrogen
-                { 1121, 60 }, // Deuterium
-                { 1122, 1000 }, // Antimatter
+                // Raw Materials - these are the starting point of our graph
+                { 1001, 10 }, { 1002, 10 }, { 1003, 20 }, { 1004, 20 }, { 1005, 30 }, { 1006, 15 },
+                { 1007, 25 }, { 1011, 100 }, { 1012, 100 }, { 1013, 100 }, { 1014, 100 }, { 1015, 150 },
+                { 1016, 200 }, { 1017, 250 }, { 1030, 5 }, { 1031, 10 }, { 1120, 30 }, { 1121, 60 },
+                { 1122, 1000 },
             };
 
-            bool newPricesAdded;
-            do
+            var recipes = LDB.recipes.dataArray.Where(r => r?.Results != null && r.Results.Length > 0).ToList();
+            var recipeDict = recipes
+                .GroupBy(r => r.Results[0])
+                .ToDictionary(g => g.Key, g => g.First());
+
+            var itemInDegree = new Dictionary<int, int>();
+            var recipeDependents = new Dictionary<int, List<int>>();
+
+            // Build the dependency graph and in-degrees
+            foreach (var recipe in recipes)
             {
-                newPricesAdded = false;
-                foreach (var item in allItemsForMarket)
+                int resultItemId = recipe.Results[0];
+                if (prices.ContainsKey(resultItemId)) continue;
+
+                int degree = 0;
+                foreach (var ingredientId in recipe.Items)
                 {
-                    if (prices.ContainsKey(item.ID)) continue;
-
-                    var recipe = GetRecipe(item.ID);
-                    if (recipe == null) continue;
-
-                    long currentPrice = 0;
-                    bool allIngredientsPriced = true;
-                    for (int j = 0; j < recipe.Items.Length; j++)
+                    if (!prices.ContainsKey(ingredientId))
                     {
-                        if (prices.TryGetValue(recipe.Items[j], out long ingredientPrice))
+                        degree++;
+                        if (!recipeDependents.ContainsKey(ingredientId))
                         {
-                            currentPrice += ingredientPrice * recipe.ItemCounts[j];
+                            recipeDependents[ingredientId] = new List<int>();
                         }
-                        else
-                        {
-                            allIngredientsPriced = false;
-                            break;
-                        }
-                    }
-
-                    if (allIngredientsPriced && currentPrice > 0)
-                    {
-                        double premium;
-                        int ingredientCount = recipe.Items.Length;
-                        if (ingredientCount <= 2)
-                        {
-                            premium = 0.6; // 60%
-                        }
-                        else if (ingredientCount <= 4)
-                        {
-                            premium = 0.8; // 80%
-                        }
-                        else
-                        {
-                            premium = 1.0; // 100%
-                        }
-                        prices[item.ID] = currentPrice + (long)(currentPrice * premium); // Tiered premium for crafting
-                        newPricesAdded = true;
+                        recipeDependents[ingredientId].Add(resultItemId);
                     }
                 }
-            } while (newPricesAdded);
+                itemInDegree[resultItemId] = degree;
+            }
+
+            // Initialize the queue with items that have all their ingredients priced
+            var queue = new Queue<int>(itemInDegree.Where(p => p.Value == 0).Select(p => p.Key));
+
+            // Process the queue (topological sort)
+            while (queue.Count > 0)
+            {
+                int itemIdToPrice = queue.Dequeue();
+                if (!recipeDict.TryGetValue(itemIdToPrice, out var recipe) || prices.ContainsKey(itemIdToPrice))
+                {
+                    continue;
+                }
+
+                long currentPrice = 0;
+                for (int j = 0; j < recipe.Items.Length; j++)
+                {
+                    if (prices.TryGetValue(recipe.Items[j], out long ingredientPrice))
+                    {
+                        currentPrice += ingredientPrice * recipe.ItemCounts[j];
+                    }
+                    else
+                    {
+                        // This should not happen in a correct topological sort
+                        currentPrice = 0;
+                        break;
+                    }
+                }
+
+                if (currentPrice > 0)
+                {
+                    double premium = recipe.Items.Length <= 2 ? 0.6 : (recipe.Items.Length <= 4 ? 0.8 : 1.0);
+                    prices[itemIdToPrice] = currentPrice + (long)(currentPrice * premium);
+
+                    // Decrement the in-degree of dependent items
+                    if (recipeDependents.TryGetValue(itemIdToPrice, out var dependents))
+                    {
+                        foreach (var dependentId in dependents)
+                        {
+                            if (itemInDegree.ContainsKey(dependentId))
+                            {
+                                itemInDegree[dependentId]--;
+                                if (itemInDegree[dependentId] == 0)
+                                {
+                                    queue.Enqueue(dependentId);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             return prices;
         }
@@ -639,6 +695,7 @@ namespace NexusLogistics
             fuelId = Config.Bind("Configuration", "fuelId", 0, "Thermal Power Plant Fuel ID\n0: Auto-select...");
             infAmmo = Config.Bind("Configuration", "InfAmmo", false, "Infinite Ammo. Ammo in the logistics backpack and interstellar logistics stations have infinite quantity");
             infFleet = Config.Bind("Configuration", "infFleet", false, "Infinite Fleet. Drones and warships in the logistics backpack and interstellar logistics stations have infinite quantity");
+            starFuelId = Config.Bind("Configuration", "starFuelId", 0, "Artificial Star Fuel ID\n0: Auto-select...");
         }
 
         /// <summary>
@@ -660,8 +717,13 @@ namespace NexusLogistics
             fuelOptions.Add(ItemIds.EnergyShard, "Energy Shard");
             fuelOptions.Add(ItemIds.CombustionUnit, "Combustion Unit");
             fuelOptions.Add(ItemIds.Wood, "Wood");
-            fuelOptions.Add(ItemIds.PlantFuel, "Plant Fuel");
+            fuelOptions.Add(ItemIds.PlantFuel, "PlantFuel");
             selectedFuelIndex = fuelOptions.Keys.ToList().FindIndex(id => id == fuelId.Value);
+
+            starFuelOptions.Add(0, "Auto");
+            starFuelOptions.Add(ItemIds.StrangeAnnihilationFuelRod, "Strange Rod");
+            starFuelOptions.Add(ItemIds.AntimatterFuelRod, "Antimatter Rod");
+            selectedStarFuelIndex = starFuelOptions.Keys.ToList().FindIndex(id => id == starFuelId.Value);
 
             proliferators.Add((ItemIds.ProliferatorMk3, 4));
             proliferators.Add((ItemIds.ProliferatorMk2, 2));
@@ -805,6 +867,7 @@ namespace NexusLogistics
                         // Wait for all tasks to complete before starting the next tick.
                         Task.WhenAll(tasks).Wait();
                         ProcessMarketOrders().Wait(); // Run this synchronously after all other item movements
+                        ProcessTradeRoutes(); // Run this synchronously at the end of the tick
                     }
                 }
                 catch (Exception ex)
@@ -842,12 +905,13 @@ namespace NexusLogistics
 
         void StorageWindowFunction(int windowID)
         {
-            string[] categories = { "Dashboard", "Storage", "Market" };
+            string[] categories = { "Dashboard", "Storage", "Market", "Contracts" };
             var newCategory = (StorageCategory)GUILayout.Toolbar((int)selectedStorageCategory, categories, toolbarStyle);
 
             if (newCategory != selectedStorageCategory)
             {
                 selectedStorageCategory = newCategory;
+                lastMarketItemCategory = (ItemCategory)(-1); // Invalidate market cache
                 // Reset sub-tabs when changing main tabs for a clean state
                 if (selectedStorageCategory == StorageCategory.Market)
                 {
@@ -866,6 +930,10 @@ namespace NexusLogistics
             else if (selectedStorageCategory == StorageCategory.Market)
             {
                 MarketPanel();
+            }
+            else if (selectedStorageCategory == StorageCategory.Contracts)
+            {
+                ContractsPanel();
             }
             else if (selectedStorageCategory == StorageCategory.Storage)
             {
@@ -955,7 +1023,12 @@ namespace NexusLogistics
 
             // Item category sub-tabs
             string[] itemCategories = { "Raw", "Intermeds", "Buildings", "Combat", "Science" };
-            selectedItemCategory = (ItemCategory)GUILayout.Toolbar((int)selectedItemCategory, itemCategories, toolbarStyle);
+            var newSelectedItemCategory = (ItemCategory)GUILayout.Toolbar((int)selectedItemCategory, itemCategories, toolbarStyle);
+            if (newSelectedItemCategory != selectedItemCategory)
+            {
+                selectedItemCategory = newSelectedItemCategory;
+                lastMarketItemCategory = (ItemCategory)(-1); // Invalidate cache
+            }
             GUILayout.Space(10);
 
             // Balance display moved here
@@ -977,16 +1050,9 @@ namespace NexusLogistics
 
                 storageScrollPosition = GUILayout.BeginScrollView(storageScrollPosition, scrollViewStyle);
 
-                foreach (var itemProto in allItemsForMarket)
+                foreach (var itemProto in marketItemsForGUI)
                 {
-                    // Filter by selected item category
-                    if (GetItemCategory(itemProto) != selectedItemCategory)
-                    {
-                        continue;
-                    }
-
-                    // Only show items that have a price and have been unlocked by the player
-                    if (!itemPrices.TryGetValue(itemProto.ID, out long basePrice) || !unlockedItems.Contains(itemProto.ID))
+                    if (!itemPrices.TryGetValue(itemProto.ID, out long basePrice))
                     {
                         continue;
                     }
@@ -1117,6 +1183,68 @@ namespace NexusLogistics
             GUILayout.EndScrollView();
         }
 
+        void ContractsPanel()
+        {
+            GUILayout.BeginVertical();
+            GUILayout.Space(10);
+
+            // --- Total Income Display ---
+            long totalIncome = (tradeRoutesTier1 * 1000L) + (tradeRoutesTier2 * 12500L) + (tradeRoutesTier3 * 150000L);
+            GUILayout.Label($"Total Passive Income: ${totalIncome:N0} / second", windowStyle);
+            GUILayout.Label($"Current Balance: ${playerBalance:N0}", labelStyle);
+
+            GUILayout.Space(20);
+
+            storageScrollPosition = GUILayout.BeginScrollView(storageScrollPosition, scrollViewStyle);
+
+            // --- Tier 1 ---
+            GUILayout.Label("Planetary Trade Route", labelStyle);
+            GUILayout.Label($"  Cost: ${10000000:N0}", labelStyle);
+            GUILayout.Label($"  Income: ${1000:N0} / second", labelStyle);
+            GUILayout.Label($"  Owned: {tradeRoutesTier1}", labelStyle);
+            if (GUILayout.Button("Buy", buttonStyle, GUILayout.Width(100)))
+            {
+                if (playerBalance >= 10000000)
+                {
+                    playerBalance -= 10000000;
+                    tradeRoutesTier1++;
+                }
+            }
+            GUILayout.Space(15);
+
+            // --- Tier 2 ---
+            GUILayout.Label("Interstellar Trade Route", labelStyle);
+            GUILayout.Label($"  Cost: ${100000000:N0}", labelStyle);
+            GUILayout.Label($"  Income: ${12500:N0} / second", labelStyle);
+            GUILayout.Label($"  Owned: {tradeRoutesTier2}", labelStyle);
+            if (GUILayout.Button("Buy", buttonStyle, GUILayout.Width(100)))
+            {
+                if (playerBalance >= 100000000)
+                {
+                    playerBalance -= 100000000;
+                    tradeRoutesTier2++;
+                }
+            }
+            GUILayout.Space(15);
+
+            // --- Tier 3 ---
+            GUILayout.Label("Galactic Trade Route", labelStyle);
+            GUILayout.Label($"  Cost: ${1000000000:N0}", labelStyle);
+            GUILayout.Label($"  Income: ${150000:N0} / second", labelStyle);
+            GUILayout.Label($"  Owned: {tradeRoutesTier3}", labelStyle);
+            if (GUILayout.Button("Buy", buttonStyle, GUILayout.Width(100)))
+            {
+                if (playerBalance >= 1000000000)
+                {
+                    playerBalance -= 1000000000;
+                    tradeRoutesTier3++;
+                }
+            }
+
+            GUILayout.EndScrollView();
+            GUILayout.EndVertical();
+        }
+
         void DashboardPanel()
         {
             storageScrollPosition = GUILayout.BeginScrollView(storageScrollPosition, scrollViewStyle);
@@ -1148,6 +1276,25 @@ namespace NexusLogistics
 
             GUILayout.EndVertical();
             GUILayout.EndScrollView();
+        }
+
+        private void RefreshMarketItemsForGUI()
+        {
+            if (selectedItemCategory == lastMarketItemCategory && marketItemsForGUI.Count > 0)
+            {
+                // No need to refresh if category hasn't changed, unless the list is empty
+                return;
+            }
+
+            marketItemsForGUI = allItemsForMarket
+                .Where(itemProto =>
+                    GetItemCategory(itemProto) == selectedItemCategory &&
+                    itemPrices.ContainsKey(itemProto.ID) &&
+                    unlockedItems.Contains(itemProto.ID))
+                .OrderBy(item => item.name)
+                .ToList();
+
+            lastMarketItemCategory = selectedItemCategory;
         }
 
         #region Dashboard Calculations
@@ -1182,8 +1329,7 @@ namespace NexusLogistics
         private List<BottleneckInfo> GetPotentialBottlenecks()
         {
             var bottlenecks = new List<BottleneckInfo>();
-            const int sampleMinutes = 5;
-            DateTime fiveMinutesAgo = DateTime.Now.AddMinutes(-sampleMinutes);
+            const int sampleMinutes = HistoryMinutes; 
 
             // Create a snapshot of the remote storage to avoid locking it for too long.
             Dictionary<int, int> currentStockSnapshot;
@@ -1196,11 +1342,13 @@ namespace NexusLogistics
             {
                 foreach (var pair in itemStats)
                 {
-                    int totalAdded = pair.Value.AddedHistory.Where(dp => dp.Timestamp >= fiveMinutesAgo).Sum(dp => dp.Amount);
-                    int totalTaken = pair.Value.TakenHistory.Where(dp => dp.Timestamp >= fiveMinutesAgo).Sum(dp => dp.Amount);
+                    var stats = pair.Value;
+                    // Prune data here to ensure totals are up-to-date before calculation
+                    PruneOldData(stats.AddedHistory, stats, true);
+                    PruneOldData(stats.TakenHistory, stats, false);
 
-                    float productionRate = totalAdded / (float)sampleMinutes;
-                    float consumptionRate = totalTaken / (float)sampleMinutes;
+                    float productionRate = stats.TotalAddedInWindow / (float)sampleMinutes;
+                    float consumptionRate = stats.TotalTakenInWindow / (float)sampleMinutes;
 
                     if (consumptionRate > productionRate)
                     {
@@ -1258,6 +1406,12 @@ namespace NexusLogistics
                 fuelId.Value = fuelOptions.Keys.ToArray()[selectedFuelIndex];
             }
             autoReplenishFPPFuel.Value = GUILayout.Toggle(autoReplenishFPPFuel.Value, "Auto-refuel Fusion Power Plants", toggleStyle);
+            if (autoReplenishFPPFuel.Value)
+            {
+                GUILayout.Label("Artificial Star Fuel:", labelStyle);
+                selectedStarFuelIndex = GUILayout.SelectionGrid(selectedStarFuelIndex, starFuelOptions.Values.ToArray(), 3, toggleStyle);
+                starFuelId.Value = starFuelOptions.Keys.ToArray()[selectedStarFuelIndex];
+            }
 
             GUILayout.EndVertical();
             GUILayout.EndScrollView();
@@ -1296,71 +1450,128 @@ namespace NexusLogistics
             {
                 if (!autoSpray.Value) return;
 
+                // Step 1: Create a snapshot of the data needed for calculation under a lock.
+                Dictionary<int, (int count, int inc)> storageSnapshot = new Dictionary<int, (int count, int inc)>();
+                Dictionary<int, int> incPoolSnapshot = new Dictionary<int, int>();
+                bool costProliferatorSnapshot = costProliferator.Value;
+                ProliferatorSelection proliferatorSelectionSnapshot = proliferatorSelection.Value;
+
                 lock (remoteStorageLock)
                 {
-                    var activeProliferators = new List<(int, int)>();
-                    switch (proliferatorSelection.Value)
-                    {
-                        case ProliferatorSelection.Mk1: activeProliferators.Add((ItemIds.ProliferatorMk1, 1)); break;
-                        case ProliferatorSelection.Mk2: activeProliferators.Add((ItemIds.ProliferatorMk2, 2)); break;
-                        case ProliferatorSelection.Mk3: activeProliferators.Add((ItemIds.ProliferatorMk3, 4)); break;
-                        case ProliferatorSelection.All: default: activeProliferators.AddRange(proliferators); break;
-                    }
-
-                    if (costProliferator.Value)
-                    {
-                        foreach (var (proliferatorId, sprayLevel) in activeProliferators)
-                        {
-                            int factor = ProliferatorBonus.GetSprayInc(proliferatorId);
-                            if (factor > 0 && remoteStorage.ContainsKey(proliferatorId))
-                            {
-                                int p_count = remoteStorage[proliferatorId].count;
-                                if (p_count > 0)
-                                {
-                                    incPool[proliferatorId] += p_count * factor;
-                                    remoteStorage[proliferatorId].count = 0;
-                                }
-                            }
-                        }
-                    }
-
                     foreach (var pair in remoteStorage)
                     {
-                        int itemId = pair.Key;
-                        var storageItem = pair.Value;
-                        if (itemId <= 0 || storageItem.count <= 0) continue;
+                        storageSnapshot[pair.Key] = (pair.Value.count, pair.Value.inc);
+                    }
+                    foreach (var pair in incPool)
+                    {
+                        incPoolSnapshot[pair.Key] = pair.Value;
+                    }
+                }
 
-                        if (itemId >= ItemIds.ProliferatorMk1 && itemId <= ItemIds.ProliferatorMk3)
+                // Step 2: Perform all calculations on the snapshot, without holding the lock.
+                var activeProliferators = new List<(int, int)>();
+                switch (proliferatorSelectionSnapshot)
+                {
+                    case ProliferatorSelection.Mk1: activeProliferators.Add((ItemIds.ProliferatorMk1, 1)); break;
+                    case ProliferatorSelection.Mk2: activeProliferators.Add((ItemIds.ProliferatorMk2, 2)); break;
+                    case ProliferatorSelection.Mk3: activeProliferators.Add((ItemIds.ProliferatorMk3, 4)); break;
+                    case ProliferatorSelection.All: default: activeProliferators.AddRange(proliferators); break;
+                }
+
+                if (costProliferatorSnapshot)
+                {
+                    foreach (var (proliferatorId, sprayLevel) in activeProliferators)
+                    {
+                        int factor = ProliferatorBonus.GetSprayInc(proliferatorId);
+                        if (factor > 0 && storageSnapshot.ContainsKey(proliferatorId))
                         {
-                            storageItem.inc = storageItem.count * 4;
-                            continue;
-                        }
-
-                        ItemProto itemProto = LDB.items.Select(itemId);
-                        if (itemProto.CanBuild || itemProto.isFighter) continue;
-
-                        if (!costProliferator.Value)
-                        {
-                            int maxSprayLevel = activeProliferators.Count > 0 ? activeProliferators.Max(p => p.Item2) : 4;
-                            if (storageItem.inc < storageItem.count * maxSprayLevel) storageItem.inc = storageItem.count * maxSprayLevel;
-                            continue;
-                        }
-
-                        foreach (var (proliferatorId, sprayLevel) in activeProliferators)
-                        {
-                            int expectedInc = storageItem.count * sprayLevel - storageItem.inc;
-                            if (expectedInc <= 0) break;
-
-                            int pointsToTake = expectedInc;
-                            int availablePoints = incPool.ContainsKey(proliferatorId) ? incPool[proliferatorId] : 0;
-                            int actualPoints = Math.Min(pointsToTake, availablePoints);
-
-                            if (actualPoints > 0)
+                            int p_count = storageSnapshot[proliferatorId].count;
+                            if (p_count > 0)
                             {
-                                storageItem.inc += actualPoints;
-                                incPool[proliferatorId] -= actualPoints;
+                                incPoolSnapshot[proliferatorId] += p_count * factor;
+                                storageSnapshot[proliferatorId] = (0, storageSnapshot[proliferatorId].inc); // Proliferator is consumed
                             }
                         }
+                    }
+                }
+
+                var updatedIncs = new Dictionary<int, int>();
+                var itemIds = new List<int>(storageSnapshot.Keys);
+
+                foreach (int itemId in itemIds)
+                {
+                    var (count, inc) = storageSnapshot[itemId];
+                    if (itemId <= 0 || count <= 0) continue;
+
+                    if (itemId >= ItemIds.ProliferatorMk1 && itemId <= ItemIds.ProliferatorMk3)
+                    {
+                        updatedIncs[itemId] = count * 4;
+                        continue;
+                    }
+
+                    ItemProto itemProto = LDB.items.Select(itemId);
+                    if (itemProto.CanBuild || itemProto.isFighter) continue;
+
+                    if (!costProliferatorSnapshot)
+                    {
+                        int maxSprayLevel = activeProliferators.Count > 0 ? activeProliferators.Max(p => p.Item2) : 4;
+                        if (inc < count * maxSprayLevel)
+                        {
+                            updatedIncs[itemId] = count * maxSprayLevel;
+                        }
+                        continue;
+                    }
+
+                    int currentInc = inc;
+                    foreach (var (proliferatorId, sprayLevel) in activeProliferators)
+                    {
+                        int expectedInc = count * sprayLevel - currentInc;
+                        if (expectedInc <= 0) break;
+
+                        int pointsToTake = expectedInc;
+                        int availablePoints = incPoolSnapshot.ContainsKey(proliferatorId) ? incPoolSnapshot[proliferatorId] : 0;
+                        int actualPoints = Math.Min(pointsToTake, availablePoints);
+
+                        if (actualPoints > 0)
+                        {
+                            currentInc += actualPoints;
+                            incPoolSnapshot[proliferatorId] -= actualPoints;
+                        }
+                    }
+                    if (currentInc > inc)
+                    {
+                        updatedIncs[itemId] = currentInc;
+                    }
+                }
+
+                // Step 3: Apply the calculated changes back to the original data under a lock.
+                lock (remoteStorageLock)
+                {
+                    if (costProliferatorSnapshot)
+                    {
+                        // Apply consumed proliferator counts
+                        foreach (var (proliferatorId, sprayLevel) in activeProliferators)
+                        {
+                            if (remoteStorage.ContainsKey(proliferatorId) && remoteStorage[proliferatorId].count > 0)
+                            {
+                                remoteStorage[proliferatorId].count = 0;
+                            }
+                        }
+                    }
+
+                    // Apply updated incs
+                    foreach (var pair in updatedIncs)
+                    {
+                        if (remoteStorage.ContainsKey(pair.Key))
+                        {
+                            remoteStorage[pair.Key].inc = pair.Value;
+                        }
+                    }
+
+                    // Update incPool
+                    foreach (var pair in incPoolSnapshot)
+                    {
+                        incPool[pair.Key] = pair.Value;
                     }
                 }
             }
@@ -1374,30 +1585,33 @@ namespace NexusLogistics
                 var deliveryPackage = GameMain.mainPlayer.deliveryPackage;
                 if (!deliveryPackage.unlocked) return;
 
-                for (int i = 0; i < deliveryPackage.gridLength; i++)
+                lock (remoteStorageLock)
                 {
-                    var grid = deliveryPackage.grids[i];
-                    if (grid.itemId <= 0) continue;
+                    for (int i = 0; i < deliveryPackage.gridLength; i++)
+                    {
+                        var grid = deliveryPackage.grids[i];
+                        if (grid.itemId <= 0) continue;
 
-                    if (grid.requireCount > grid.count)
-                    {
-                        int needCount = grid.requireCount - grid.count;
-                        int[] result = TakeItem(grid.itemId, needCount);
-                        if (result[0] > 0)
+                        if (grid.requireCount > grid.count)
                         {
-                            deliveryPackage.grids[i].count += result[0];
-                            deliveryPackage.grids[i].inc += result[1];
+                            int needCount = grid.requireCount - grid.count;
+                            int[] result = UnsafeTakeItem(grid.itemId, needCount);
+                            if (result[0] > 0)
+                            {
+                                deliveryPackage.grids[i].count += result[0];
+                                deliveryPackage.grids[i].inc += result[1];
+                            }
                         }
-                    }
-                    else if (grid.recycleCount < grid.count)
-                    {
-                        int supplyCount = grid.count - grid.recycleCount;
-                        int supplyInc = SplitInc(grid.count, grid.inc, supplyCount);
-                        int[] result = AddItem(grid.itemId, supplyCount, supplyInc, true);
-                        if (result[0] > 0)
+                        else if (grid.recycleCount < grid.count)
                         {
-                            deliveryPackage.grids[i].count -= result[0];
-                            deliveryPackage.grids[i].inc -= result[1];
+                            int supplyCount = grid.count - grid.recycleCount;
+                            int supplyInc = SplitInc(grid.count, grid.inc, supplyCount);
+                            int[] result = UnsafeAddItem(grid.itemId, supplyCount, supplyInc, true);
+                            if (result[0] > 0)
+                            {
+                                deliveryPackage.grids[i].count -= result[0];
+                                deliveryPackage.grids[i].inc -= result[1];
+                            }
                         }
                     }
                 }
@@ -1412,31 +1626,34 @@ namespace NexusLogistics
                 foreach (var pf in GameMain.data.factories)
                 {
                     if (pf == null) continue;
-                    foreach (StationComponent sc in pf.transport.stationPool)
+                    lock (remoteStorageLock)
                     {
-                        if (sc == null || sc.id <= 0 || sc.isCollector || sc.isVeinCollector) continue;
-
-                        for (int i = 0; i < sc.storage.Length; i++)
+                        foreach (StationComponent sc in pf.transport.stationPool)
                         {
-                            StationStore ss = sc.storage[i];
-                            if (ss.itemId <= 0) continue;
+                            if (sc == null || sc.id <= 0 || sc.isCollector || sc.isVeinCollector) continue;
 
-                            var logic = sc.isStellar ? ss.remoteLogic : ss.localLogic;
-                            var order = sc.isStellar ? ss.remoteOrder : ss.localOrder;
+                            for (int i = 0; i < sc.storage.Length; i++)
+                            {
+                                StationStore ss = sc.storage[i];
+                                if (ss.itemId <= 0) continue;
 
-                            if (logic == ELogisticStorage.Supply && ss.count > 0)
-                            {
-                                int[] result = AddItem(ss.itemId, ss.count, ss.inc);
-                                sc.storage[i].count -= result[0];
-                                sc.storage[i].inc -= result[1];
-                            }
-                            else if (logic == ELogisticStorage.Demand)
-                            {
-                                int expectCount = ss.max - order - ss.count;
-                                if (expectCount <= 0) continue;
-                                int[] result = TakeItem(ss.itemId, expectCount);
-                                sc.storage[i].count += result[0];
-                                sc.storage[i].inc += result[1];
+                                var logic = sc.isStellar ? ss.remoteLogic : ss.localLogic;
+                                var order = sc.isStellar ? ss.remoteOrder : ss.localOrder;
+
+                                if (logic == ELogisticStorage.Supply && ss.count > 0)
+                                {
+                                    int[] result = UnsafeAddItem(ss.itemId, ss.count, ss.inc);
+                                    sc.storage[i].count -= result[0];
+                                    sc.storage[i].inc -= result[1];
+                                }
+                                else if (logic == ELogisticStorage.Demand)
+                                {
+                                    int expectCount = ss.max - order - ss.count;
+                                    if (expectCount <= 0) continue;
+                                    int[] result = UnsafeTakeItem(ss.itemId, expectCount);
+                                    sc.storage[i].count += result[0];
+                                    sc.storage[i].inc += result[1];
+                                }
                             }
                         }
                     }
@@ -1453,40 +1670,43 @@ namespace NexusLogistics
                 {
                     if (pf == null) continue;
 
-                    foreach (StorageComponent sc in pf.factoryStorage.storagePool)
+                    lock (remoteStorageLock)
                     {
-                        if (sc == null || sc.isEmpty) continue;
-                        bool changed = false;
-                        for (int i = 0; i < sc.grids.Length; i++)
+                        foreach (StorageComponent sc in pf.factoryStorage.storagePool)
                         {
-                            StorageComponent.GRID grid = sc.grids[i];
-                            if (grid.itemId <= 0 || grid.count <= 0) continue;
-                            int[] result = AddItem(grid.itemId, grid.count, grid.inc);
-                            if (result[0] > 0)
+                            if (sc == null || sc.isEmpty) continue;
+                            bool changed = false;
+                            for (int i = 0; i < sc.grids.Length; i++)
                             {
-                                sc.grids[i].count -= result[0];
-                                sc.grids[i].inc -= result[1];
-                                if (sc.grids[i].count <= 0)
+                                StorageComponent.GRID grid = sc.grids[i];
+                                if (grid.itemId <= 0 || grid.count <= 0) continue;
+                                int[] result = UnsafeAddItem(grid.itemId, grid.count, grid.inc);
+                                if (result[0] > 0)
                                 {
-                                    sc.grids[i].itemId = sc.grids[i].filter;
+                                    sc.grids[i].count -= result[0];
+                                    sc.grids[i].inc -= result[1];
+                                    if (sc.grids[i].count <= 0)
+                                    {
+                                        sc.grids[i].itemId = sc.grids[i].filter;
+                                    }
+                                    changed = true;
                                 }
-                                changed = true;
                             }
+                            if (changed) sc.NotifyStorageChange();
                         }
-                        if (changed) sc.NotifyStorageChange();
-                    }
 
-                    for (int i = 0; i < pf.factoryStorage.tankPool.Length; ++i)
-                    {
-                        TankComponent tc = pf.factoryStorage.tankPool[i];
-                        if (tc.id == 0 || tc.fluidId == 0 || tc.fluidCount == 0) continue;
-                        int[] result = AddItem(tc.fluidId, tc.fluidCount, tc.fluidInc);
-                        pf.factoryStorage.tankPool[i].fluidCount -= result[0];
-                        pf.factoryStorage.tankPool[i].fluidInc -= result[1];
-                        if (pf.factoryStorage.tankPool[i].fluidCount <= 0)
+                        for (int i = 0; i < pf.factoryStorage.tankPool.Length; ++i)
                         {
-                            pf.factoryStorage.tankPool[i].fluidId = 0;
-                            pf.factoryStorage.tankPool[i].fluidInc = 0;
+                            TankComponent tc = pf.factoryStorage.tankPool[i];
+                            if (tc.id == 0 || tc.fluidId == 0 || tc.fluidCount == 0) continue;
+                            int[] result = UnsafeAddItem(tc.fluidId, tc.fluidCount, tc.fluidInc);
+                            pf.factoryStorage.tankPool[i].fluidCount -= result[0];
+                            pf.factoryStorage.tankPool[i].fluidInc -= result[1];
+                            if (pf.factoryStorage.tankPool[i].fluidCount <= 0)
+                            {
+                                pf.factoryStorage.tankPool[i].fluidId = 0;
+                                pf.factoryStorage.tankPool[i].fluidInc = 0;
+                            }
                         }
                     }
                 }
@@ -1501,22 +1721,25 @@ namespace NexusLogistics
                 foreach (var pf in GameMain.data.factories)
                 {
                     if (pf == null) continue;
-                    foreach (AssemblerComponent ac in pf.factorySystem.assemblerPool)
+                    lock (remoteStorageLock)
                     {
-                        if (ac.id <= 0 || ac.recipeId <= 0) continue;
-                        for (int i = 0; i < ac.products.Length; i++)
+                        foreach (AssemblerComponent ac in pf.factorySystem.assemblerPool)
                         {
-                            if (ac.produced[i] > 0)
-                                ac.produced[i] -= AddItem(ac.products[i], ac.produced[i], 0)[0];
-                        }
-                        for (int i = 0; i < ac.requires.Length; i++)
-                        {
-                            int expectCount = Math.Max(ac.requireCounts[i] * 5 - ac.served[i], 0);
-                            if (expectCount > 0)
+                            if (ac.id <= 0 || ac.recipeId <= 0) continue;
+                            for (int i = 0; i < ac.products.Length; i++)
                             {
-                                int[] result = TakeItem(ac.requires[i], expectCount);
-                                ac.served[i] += result[0];
-                                ac.incServed[i] += result[1];
+                                if (ac.produced[i] > 0)
+                                    ac.produced[i] -= UnsafeAddItem(ac.products[i], ac.produced[i], 0)[0];
+                            }
+                            for (int i = 0; i < ac.requires.Length; i++)
+                            {
+                                int expectCount = Math.Max(ac.requireCounts[i] * 5 - ac.served[i], 0);
+                                if (expectCount > 0)
+                                {
+                                    int[] result = UnsafeTakeItem(ac.requires[i], expectCount);
+                                    ac.served[i] += result[0];
+                                    ac.incServed[i] += result[1];
+                                }
                             }
                         }
                     }
@@ -1533,34 +1756,37 @@ namespace NexusLogistics
                 {
                     if (pf == null) continue;
 
-                    for (int i = 0; i < pf.factorySystem.minerPool.Length; i++)
+                    lock (remoteStorageLock)
                     {
-                        MinerComponent mc = pf.factorySystem.minerPool[i];
-                        if (mc.id <= 0 || mc.productId <= 0 || mc.productCount <= 0) continue;
-                        int[] result = AddItem(mc.productId, mc.productCount, 0);
-                        pf.factorySystem.minerPool[i].productCount -= result[0];
-                    }
-
-                    foreach (StationComponent sc in pf.transport.stationPool)
-                    {
-                        if (sc == null || sc.id <= 0) continue;
-
-                        if (sc.isStellar && sc.isCollector)
+                        for (int i = 0; i < pf.factorySystem.minerPool.Length; i++)
                         {
-                            for (int i = 0; i < sc.storage.Length; i++)
-                            {
-                                StationStore ss = sc.storage[i];
-                                if (ss.itemId <= 0 || ss.count <= 0 || ss.remoteLogic != ELogisticStorage.Supply) continue;
-                                int[] result = AddItem(ss.itemId, ss.count, 0);
-                                sc.storage[i].count -= result[0];
-                            }
+                            MinerComponent mc = pf.factorySystem.minerPool[i];
+                            if (mc.id <= 0 || mc.productId <= 0 || mc.productCount <= 0) continue;
+                            int[] result = UnsafeAddItem(mc.productId, mc.productCount, 0);
+                            pf.factorySystem.minerPool[i].productCount -= result[0];
                         }
-                        else if (sc.isVeinCollector)
+
+                        foreach (StationComponent sc in pf.transport.stationPool)
                         {
-                            StationStore ss = sc.storage[0];
-                            if (ss.itemId <= 0 || ss.count <= 0 || ss.localLogic != ELogisticStorage.Supply) continue;
-                            int[] result = AddItem(ss.itemId, ss.count, 0);
-                            sc.storage[0].count -= result[0];
+                            if (sc == null || sc.id <= 0) continue;
+
+                            if (sc.isStellar && sc.isCollector)
+                            {
+                                for (int i = 0; i < sc.storage.Length; i++)
+                                {
+                                    StationStore ss = sc.storage[i];
+                                    if (ss.itemId <= 0 || ss.count <= 0 || ss.remoteLogic != ELogisticStorage.Supply) continue;
+                                    int[] result = UnsafeAddItem(ss.itemId, ss.count, 0);
+                                    sc.storage[i].count -= result[0];
+                                }
+                            }
+                            else if (sc.isVeinCollector)
+                            {
+                                StationStore ss = sc.storage[0];
+                                if (ss.itemId <= 0 || ss.count <= 0 || ss.localLogic != ELogisticStorage.Supply) continue;
+                                int[] result = UnsafeAddItem(ss.itemId, ss.count, 0);
+                                sc.storage[0].count -= result[0];
+                            }
                         }
                     }
                 }
@@ -1572,12 +1798,10 @@ namespace NexusLogistics
         {
             try
             {
-                // *** OPTIMIZATION: Determine best fuel ONCE per tick ***
-                int bestThermalFuel = 0;
-                if (autoReplenishTPPFuel.Value)
-                {
-                    bestThermalFuel = GetBestThermalFuel();
-                }
+                // This task is now driven by a unified, data-driven approach.
+                // For each generator, we determine its valid fuel types and capacity.
+                // Then, we use a pessimistic try-take loop to ensure the highest-priority fuel is always taken,
+                // which is robust against race conditions.
 
                 foreach (var pf in GameMain.data.factories)
                 {
@@ -1587,7 +1811,7 @@ namespace NexusLogistics
                         PowerGeneratorComponent pgc = pf.powerSystem.genPool[i];
                         if (pgc.id <= 0) continue;
 
-                        if (pgc.gamma) // Artificial Sun
+                        if (pgc.gamma) // Artificial Sun logic remains separate
                         {
                             if (pgc.catalystPoint + pgc.catalystIncPoint < 3600)
                             {
@@ -1607,49 +1831,67 @@ namespace NexusLogistics
                             continue;
                         }
 
-                        int fuelToUse = 0;
+                        List<int> fuelPriority = null;
+                        int fuelCapacity = 0;
+
                         switch (pgc.fuelMask)
                         {
-                            case 1: // Thermal Power Station
-                                fuelToUse = bestThermalFuel;
+                            case 1: // Thermal
+                                if (autoReplenishTPPFuel.Value)
+                                {
+                                    fuelPriority = thermalFuelsByPriority;
+                                    fuelCapacity = 50;
+                                }
                                 break;
                             case 2: // Artificial Star
                                 if (autoReplenishFPPFuel.Value)
                                 {
-                                    if (HasItem(ItemIds.StrangeAnnihilationFuelRod))
+                                    if (starFuelId.Value != 0)
                                     {
-                                        fuelToUse = ItemIds.StrangeAnnihilationFuelRod;
+                                        fuelPriority = new List<int> { starFuelId.Value };
                                     }
-                                    else if (HasItem(ItemIds.AntimatterFuelRod))
+                                    else
                                     {
-                                        fuelToUse = ItemIds.AntimatterFuelRod;
+                                        fuelPriority = new List<int> { ItemIds.StrangeAnnihilationFuelRod, ItemIds.AntimatterFuelRod };
                                     }
+                                    fuelCapacity = 5;
                                 }
                                 break;
-                            case 4: // Mini Fusion Power Station
-                                if (autoReplenishFPPFuel.Value && HasItem(ItemIds.DeuteronFuelRod))
+                            case 4: // Mini Fusion
+                                if (autoReplenishFPPFuel.Value)
                                 {
-                                    fuelToUse = ItemIds.DeuteronFuelRod;
+                                    fuelPriority = new List<int> { ItemIds.DeuteronFuelRod };
+                                    fuelCapacity = 5;
                                 }
                                 break;
                         }
 
-                        if (fuelToUse == 0) continue;
-
-                        // This logic correctly waits for the current fuel to run out before switching to a new (better) one.
-                        if (fuelToUse != pgc.fuelId && pgc.fuelCount == 0)
+                        // Refuel if empty
+                        if (fuelPriority != null && pgc.fuelCount == 0)
                         {
-                            int[] result = TakeItem(fuelToUse, 5);
-                            if (result[0] > 0)
+                            foreach (var fuelIdToTry in fuelPriority)
                             {
-                                pf.powerSystem.genPool[i].SetNewFuel(fuelToUse, (short)result[0], (short)result[1]);
+                                int[] result = TakeItem(fuelIdToTry, fuelCapacity);
+                                if (result[0] > 0)
+                                {
+                                    pf.powerSystem.genPool[i].SetNewFuel(fuelIdToTry, (short)result[0], (short)result[1]);
+                                    break; // Fueling successful, stop trying other fuels
+                                }
                             }
                         }
-                        else if (fuelToUse == pgc.fuelId && pgc.fuelCount < 5)
+                        // Top-up if not full
+                        else if (fuelPriority != null && pgc.fuelId > 0 && pgc.fuelCount < fuelCapacity)
                         {
-                            int[] result = TakeItem(fuelToUse, 5 - pgc.fuelCount);
-                            pf.powerSystem.genPool[i].fuelCount += (short)result[0];
-                            pf.powerSystem.genPool[i].fuelInc += (short)result[1];
+                            // Only top-up with a fuel type that is valid for this generator
+                            if (fuelPriority.Contains(pgc.fuelId))
+                            {
+                                int[] result = TakeItem(pgc.fuelId, fuelCapacity - pgc.fuelCount);
+                                if (result[0] > 0)
+                                {
+                                    pf.powerSystem.genPool[i].fuelCount += (short)result[0];
+                                    pf.powerSystem.genPool[i].fuelInc += (short)result[1];
+                                }
+                            }
                         }
                     }
                 }
@@ -1664,33 +1906,36 @@ namespace NexusLogistics
                 foreach (var pf in GameMain.data.factories)
                 {
                     if (pf == null) continue;
-                    for (int i = 0; i < pf.powerSystem.excPool.Length; i++)
+                    lock (remoteStorageLock)
                     {
-                        PowerExchangerComponent pec = pf.powerSystem.excPool[i];
-                        if (pec.targetState == -1) // Discharge
+                        for (int i = 0; i < pf.powerSystem.excPool.Length; i++)
                         {
-                            if (pec.fullCount < 3)
+                            PowerExchangerComponent pec = pf.powerSystem.excPool[i];
+                            if (pec.targetState == -1) // Discharge
                             {
-                                int[] result = TakeItem(pec.fullId, 3 - pec.fullCount);
-                                pf.powerSystem.excPool[i].fullCount += (short)result[0];
+                                if (pec.fullCount < 3)
+                                {
+                                    int[] result = UnsafeTakeItem(pec.fullId, 3 - pec.fullCount);
+                                    pf.powerSystem.excPool[i].fullCount += (short)result[0];
+                                }
+                                if (pec.emptyCount > 0)
+                                {
+                                    int[] result = UnsafeAddItem(pec.emptyId, pec.emptyCount, 0);
+                                    pf.powerSystem.excPool[i].emptyCount -= (short)result[0];
+                                }
                             }
-                            if (pec.emptyCount > 0)
+                            else if (pec.targetState == 1) // Charge
                             {
-                                int[] result = AddItem(pec.emptyId, pec.emptyCount, 0);
-                                pf.powerSystem.excPool[i].emptyCount -= (short)result[0];
-                            }
-                        }
-                        else if (pec.targetState == 1) // Charge
-                        {
-                            if (pec.emptyCount < 5)
-                            {
-                                int[] result = TakeItem(pec.emptyId, 5 - pec.emptyCount);
-                                pf.powerSystem.excPool[i].emptyCount += (short)result[0];
-                            }
-                            if (pec.fullCount > 0)
-                            {
-                                int[] result = AddItem(pec.fullId, pec.fullCount, 0);
-                                pf.powerSystem.excPool[i].fullCount -= (short)result[0];
+                                if (pec.emptyCount < 5)
+                                {
+                                    int[] result = UnsafeTakeItem(pec.emptyId, 5 - pec.emptyCount);
+                                    pf.powerSystem.excPool[i].emptyCount += (short)result[0];
+                                }
+                                if (pec.fullCount > 0)
+                                {
+                                    int[] result = UnsafeAddItem(pec.fullId, pec.fullCount, 0);
+                                    pf.powerSystem.excPool[i].fullCount -= (short)result[0];
+                                }
                             }
                         }
                     }
@@ -1706,14 +1951,17 @@ namespace NexusLogistics
                 foreach (var pf in GameMain.data.factories)
                 {
                     if (pf == null) continue;
-                    for (int i = 0; i < pf.factorySystem.siloPool.Length; i++)
+                    lock (remoteStorageLock)
                     {
-                        SiloComponent sc = pf.factorySystem.siloPool[i];
-                        if (sc.id > 0 && sc.bulletCount <= 3)
+                        for (int i = 0; i < pf.factorySystem.siloPool.Length; i++)
                         {
-                            int[] result = TakeItem(sc.bulletId, 10);
-                            pf.factorySystem.siloPool[i].bulletCount += result[0];
-                            pf.factorySystem.siloPool[i].bulletInc += result[1];
+                            SiloComponent sc = pf.factorySystem.siloPool[i];
+                            if (sc.id > 0 && sc.bulletCount <= 3)
+                            {
+                                int[] result = UnsafeTakeItem(sc.bulletId, 10);
+                                pf.factorySystem.siloPool[i].bulletCount += result[0];
+                                pf.factorySystem.siloPool[i].bulletInc += result[1];
+                            }
                         }
                     }
                 }
@@ -1728,14 +1976,17 @@ namespace NexusLogistics
                 foreach (var pf in GameMain.data.factories)
                 {
                     if (pf == null) continue;
-                    for (int i = 0; i < pf.factorySystem.ejectorPool.Length; i++)
+                    lock (remoteStorageLock)
                     {
-                        EjectorComponent ec = pf.factorySystem.ejectorPool[i];
-                        if (ec.id > 0 && ec.bulletCount <= 5)
+                        for (int i = 0; i < pf.factorySystem.ejectorPool.Length; i++)
                         {
-                            int[] result = TakeItem(ec.bulletId, 15);
-                            pf.factorySystem.ejectorPool[i].bulletCount += result[0];
-                            pf.factorySystem.ejectorPool[i].bulletInc += result[1];
+                            EjectorComponent ec = pf.factorySystem.ejectorPool[i];
+                            if (ec.id > 0 && ec.bulletCount <= 5)
+                            {
+                                int[] result = UnsafeTakeItem(ec.bulletId, 15);
+                                pf.factorySystem.ejectorPool[i].bulletCount += result[0];
+                                pf.factorySystem.ejectorPool[i].bulletInc += result[1];
+                            }
                         }
                     }
                 }
@@ -1750,34 +2001,37 @@ namespace NexusLogistics
                 foreach (var pf in GameMain.data.factories)
                 {
                     if (pf == null) continue;
-                    foreach (LabComponent lc in pf.factorySystem.labPool)
+                    lock (remoteStorageLock)
                     {
-                        if (lc.id <= 0) continue;
-                        if (lc.recipeId > 0)
+                        foreach (LabComponent lc in pf.factorySystem.labPool)
                         {
-                            for (int i = 0; i < lc.products.Length; i++)
+                            if (lc.id <= 0) continue;
+                            if (lc.recipeId > 0)
                             {
-                                if (lc.produced[i] > 0)
+                                for (int i = 0; i < lc.products.Length; i++)
                                 {
-                                    lc.produced[i] -= AddItem(lc.products[i], lc.produced[i], 0)[0];
+                                    if (lc.produced[i] > 0)
+                                    {
+                                        lc.produced[i] -= UnsafeAddItem(lc.products[i], lc.produced[i], 0)[0];
+                                    }
+                                }
+                                for (int i = 0; i < lc.requires.Length; i++)
+                                {
+                                    int expectCount = lc.requireCounts[i] * 3 - lc.served[i] - lc.incServed[i];
+                                    int[] result = UnsafeTakeItem(lc.requires[i], expectCount);
+                                    lc.served[i] += result[0];
+                                    lc.incServed[i] += result[1];
                                 }
                             }
-                            for (int i = 0; i < lc.requires.Length; i++)
+                            else if (lc.researchMode)
                             {
-                                int expectCount = lc.requireCounts[i] * 3 - lc.served[i] - lc.incServed[i];
-                                int[] result = TakeItem(lc.requires[i], expectCount);
-                                lc.served[i] += result[0];
-                                lc.incServed[i] += result[1];
-                            }
-                        }
-                        else if (lc.researchMode)
-                        {
-                            for (int i = 0; i < lc.matrixPoints.Length; i++)
-                            {
-                                if (lc.matrixPoints[i] <= 0 || lc.matrixServed[i] >= lc.matrixPoints[i] * 3600) continue;
-                                int[] result = TakeItem(LabComponent.matrixIds[i], lc.matrixPoints[i]);
-                                lc.matrixServed[i] += result[0] * 3600;
-                                lc.matrixIncServed[i] += result[1] * 3600;
+                                for (int i = 0; i < lc.matrixPoints.Length; i++)
+                                {
+                                    if (lc.matrixPoints[i] <= 0 || lc.matrixServed[i] >= lc.matrixPoints[i] * 3600) continue;
+                                    int[] result = UnsafeTakeItem(LabComponent.matrixIds[i], lc.matrixPoints[i]);
+                                    lc.matrixServed[i] += result[0] * 3600;
+                                    lc.matrixIncServed[i] += result[1] * 3600;
+                                }
                             }
                         }
                     }
@@ -1793,17 +2047,20 @@ namespace NexusLogistics
                 foreach (var pf in GameMain.data.factories)
                 {
                     if (pf == null) continue;
-                    for (int i = 0; i < pf.defenseSystem.turrets.buffer.Length; i++)
+                    lock (remoteStorageLock)
                     {
-                        TurretComponent tc = pf.defenseSystem.turrets.buffer[i];
-                        if (tc.id == 0 || tc.type == ETurretType.Laser || tc.ammoType == EAmmoType.None || tc.itemCount > 0 || tc.bulletCount > 0) continue;
-                        foreach (int itemId in ammos[tc.ammoType])
+                        for (int i = 0; i < pf.defenseSystem.turrets.buffer.Length; i++)
                         {
-                            int[] result = TakeItem(itemId, 50 - tc.itemCount);
-                            if (result[0] != 0)
+                            TurretComponent tc = pf.defenseSystem.turrets.buffer[i];
+                            if (tc.id == 0 || tc.type == ETurretType.Laser || tc.ammoType == EAmmoType.None || tc.itemCount > 0 || tc.bulletCount > 0) continue;
+                            foreach (int itemId in ammos[tc.ammoType])
                             {
-                                pf.defenseSystem.turrets.buffer[i].SetNewItem(itemId, (short)result[0], (short)result[1]);
-                                break;
+                                int[] result = UnsafeTakeItem(itemId, 50 - tc.itemCount);
+                                if (result[0] != 0)
+                                {
+                                    pf.defenseSystem.turrets.buffer[i].SetNewItem(itemId, (short)result[0], (short)result[1]);
+                                    break;
+                                }
                             }
                         }
                     }
@@ -1820,48 +2077,51 @@ namespace NexusLogistics
                 foreach (var pf in GameMain.data.factories)
                 {
                     if (pf == null) continue;
-                    for (int i = 0; i < pf.defenseSystem.battleBases.buffer.Length; i++)
+                    lock (remoteStorageLock)
                     {
-                        BattleBaseComponent bbc = pf.defenseSystem.battleBases.buffer[i];
-                        if (bbc?.combatModule == null) continue;
-
-                        ModuleFleet fleet = bbc.combatModule.moduleFleets[0];
-                        for (int fIndex = 0; fIndex < fleet.fighters.Length; fIndex++)
+                        for (int i = 0; i < pf.defenseSystem.battleBases.buffer.Length; i++)
                         {
-                            if (fleet.fighters[fIndex].count == 0)
+                            BattleBaseComponent bbc = pf.defenseSystem.battleBases.buffer[i];
+                            if (bbc?.combatModule == null) continue;
+
+                            ModuleFleet fleet = bbc.combatModule.moduleFleets[0];
+                            for (int fIndex = 0; fIndex < fleet.fighters.Length; fIndex++)
                             {
-                                foreach (int itemId in fighters)
+                                if (fleet.fighters[fIndex].count == 0)
                                 {
-                                    if (TakeItem(itemId, 1)[0] != 0)
+                                    foreach (int itemId in fighters)
                                     {
-                                        fleet.AddFighterToPort(fIndex, itemId);
-                                        break;
+                                        if (UnsafeTakeItem(itemId, 1)[0] != 0)
+                                        {
+                                            fleet.AddFighterToPort(fIndex, itemId);
+                                            break;
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        if (useStorege.Value) continue;
-                        StorageComponent sc = bbc.storage;
-                        if (sc.isEmpty) continue;
-                        bool changed = false;
-                        for (int gIndex = 0; gIndex < sc.grids.Length; gIndex++)
-                        {
-                            StorageComponent.GRID grid = sc.grids[gIndex];
-                            if (grid.itemId <= 0 || grid.count <= 0) continue;
-                            int[] result = AddItem(grid.itemId, grid.count, grid.inc);
-                            if (result[0] > 0)
+                            if (useStorege.Value) continue;
+                            StorageComponent sc = bbc.storage;
+                            if (sc.isEmpty) continue;
+                            bool changed = false;
+                            for (int gIndex = 0; gIndex < sc.grids.Length; gIndex++)
                             {
-                                sc.grids[gIndex].count -= result[0];
-                                sc.grids[gIndex].inc -= result[1];
-                                if (sc.grids[gIndex].count <= 0)
+                                StorageComponent.GRID grid = sc.grids[gIndex];
+                                if (grid.itemId <= 0 || grid.count <= 0) continue;
+                                int[] result = UnsafeAddItem(grid.itemId, grid.count, grid.inc);
+                                if (result[0] > 0)
                                 {
-                                    sc.grids[gIndex].itemId = sc.grids[gIndex].filter;
+                                    sc.grids[gIndex].count -= result[0];
+                                    sc.grids[gIndex].inc -= result[1];
+                                    if (sc.grids[gIndex].count <= 0)
+                                    {
+                                        sc.grids[gIndex].itemId = sc.grids[gIndex].filter;
+                                    }
+                                    changed = true;
                                 }
-                                changed = true;
                             }
+                            if (changed) sc.NotifyStorageChange();
                         }
-                        if (changed) sc.NotifyStorageChange();
                     }
                 }
             }
@@ -1936,23 +2196,49 @@ namespace NexusLogistics
             catch (Exception ex) { Logger.LogError($"Error in ProcessMarketOrders: {ex}"); }
         });
 
+        private float _tradeRouteIncomeTimer = 0f;
+        private const float TradeRouteIncomeInterval = 1.0f; // 1 second
+
+        void ProcessTradeRoutes()
+        {
+            // This method is called every 50ms, so we use a timer to only add income once per second.
+            _tradeRouteIncomeTimer += 0.05f; // 50ms tick
+            if (_tradeRouteIncomeTimer >= TradeRouteIncomeInterval)
+            {
+                _tradeRouteIncomeTimer -= TradeRouteIncomeInterval;
+
+                long incomeThisSecond = 0;
+                incomeThisSecond += tradeRoutesTier1 * 1000L;
+                incomeThisSecond += tradeRoutesTier2 * 12500L;
+                incomeThisSecond += tradeRoutesTier3 * 150000L;
+
+                if (incomeThisSecond > 0)
+                {
+                    Interlocked.Add(ref playerBalance, incomeThisSecond);
+                }
+            }
+        }
+
         Task ProcessPackage() => Task.Run(() =>
         {
             try
             {
                 bool changed = false;
                 StorageComponent package = GameMain.mainPlayer.package;
-                for (int i = 0; i < package.grids.Length; i++)
+                lock (remoteStorageLock)
                 {
-                    StorageComponent.GRID grid = package.grids[i];
-                    if (grid.filter != 0 && grid.count < grid.stackSize)
+                    for (int i = 0; i < package.grids.Length; i++)
                     {
-                        int[] result = TakeItem(grid.itemId, grid.stackSize - grid.count);
-                        if (result[0] != 0)
+                        StorageComponent.GRID grid = package.grids[i];
+                        if (grid.filter != 0 && grid.count < grid.stackSize)
                         {
-                            package.grids[i].count += result[0];
-                            package.grids[i].inc += result[1];
-                            changed = true;
+                            int[] result = UnsafeTakeItem(grid.itemId, grid.stackSize - grid.count);
+                            if (result[0] != 0)
+                            {
+                                package.grids[i].count += result[0];
+                                package.grids[i].inc += result[1];
+                                changed = true;
+                            }
                         }
                     }
                 }
@@ -2044,53 +2330,70 @@ namespace NexusLogistics
 
             lock (remoteStorageLock)
             {
-                if (!remoteStorage.ContainsKey(itemId))
-                {
-                    ItemProto itemProto = LDB.items.Select(itemId);
-                    ItemCategory category = GetItemCategory(itemProto);
-                    int defaultLimit = 1000000;
-                    if (category == ItemCategory.BuildingsAndVehicles || category == ItemCategory.AmmunitionAndCombat)
-                    {
-                        defaultLimit = 1000;
-                    }
-                    remoteStorage[itemId] = new RemoteStorageItem { count = 0, inc = 0, limit = defaultLimit };
-                }
-
-                var storageItem = remoteStorage[itemId];
-                int amountToAdd = count;
-
-                if (!bypassLimit)
-                {
-                    int spaceAvailable = storageItem.limit - storageItem.count;
-                    if (spaceAvailable <= 0) return new int[] { 0, 0 };
-                    amountToAdd = Math.Min(count, spaceAvailable);
-                }
-                
-                if (amountToAdd <= 0) return new int[] { 0, 0 };
-
-                int incToAdd = SplitInc(count, inc, amountToAdd);
-
-                storageItem.count += amountToAdd;
-                storageItem.inc += incToAdd;
-
-                if (amountToAdd > 0)
-                {
-                    unlockedItems.Add(itemId);
-                    RecordAdd(itemId, amountToAdd);
-                }
-
-                return new int[] { amountToAdd, incToAdd };
+                return UnsafeAddItem(itemId, count, inc, bypassLimit);
             }
+        }
+
+        /// <summary>
+        /// Adds an item to the central remote storage without acquiring a lock. Caller must handle thread safety.
+        /// </summary>
+        private int[] UnsafeAddItem(int itemId, int count, int inc, bool bypassLimit = false)
+        {
+            if (!remoteStorage.ContainsKey(itemId))
+            {
+                ItemProto itemProto = LDB.items.Select(itemId);
+                ItemCategory category = GetItemCategory(itemProto);
+                int defaultLimit = 1000000;
+                if (category == ItemCategory.BuildingsAndVehicles || category == ItemCategory.AmmunitionAndCombat)
+                {
+                    defaultLimit = 1000;
+                }
+                remoteStorage[itemId] = new RemoteStorageItem { count = 0, inc = 0, limit = defaultLimit };
+            }
+
+            var storageItem = remoteStorage[itemId];
+            int amountToAdd = count;
+
+            if (!bypassLimit)
+            {
+                int spaceAvailable = storageItem.limit - storageItem.count;
+                if (spaceAvailable <= 0) return new int[] { 0, 0 };
+                amountToAdd = Math.Min(count, spaceAvailable);
+            }
+
+            if (amountToAdd <= 0) return new int[] { 0, 0 };
+
+            int incToAdd = SplitInc(count, inc, amountToAdd);
+
+            storageItem.count += amountToAdd;
+            storageItem.inc += incToAdd;
+
+            if (amountToAdd > 0)
+            {
+                unlockedItems.Add(itemId);
+                RecordAdd(itemId, amountToAdd);
+            }
+
+            return new int[] { amountToAdd, incToAdd };
         }
 
         /// <summary>
         /// Takes an item from the central remote storage.
         /// </summary>
         /// <returns>An array containing the count and inc of the item actually taken.</returns>
-        int[] TakeItem(int itemId, int count)
+        public int[] TakeItem(int itemId, int count)
         {
-            if (itemId <= 0 || count <= 0) return new int[] { 0, 0 };
+            lock (remoteStorageLock)
+            {
+                return UnsafeTakeItem(itemId, count);
+            }
+        }
 
+        /// <summary>
+        /// Takes an item from the central remote storage without acquiring a lock. Caller must handle thread safety.
+        /// </summary>
+        private int[] UnsafeTakeItem(int itemId, int count)
+        {
             ItemProto item = LDB.items.Select(itemId);
             bool isInfinite = (infItems.Value) ||
                               (infVeins.Value && IsVein(itemId)) ||
@@ -2104,28 +2407,25 @@ namespace NexusLogistics
                 return new int[] { count, inc };
             }
 
-            lock (remoteStorageLock)
+            if (remoteStorage.ContainsKey(itemId))
             {
-                if (remoteStorage.ContainsKey(itemId))
+                var itemInStorage = remoteStorage[itemId];
+                int availableCount = itemInStorage.count;
+
+                if (availableCount > 0)
                 {
-                    var itemInStorage = remoteStorage[itemId];
-                    int availableCount = itemInStorage.count;
+                    int takenCount = Math.Min(count, availableCount);
+                    int takenInc = SplitInc(availableCount, itemInStorage.inc, takenCount);
 
-                    if (availableCount > 0)
+                    itemInStorage.count -= takenCount;
+                    itemInStorage.inc -= takenInc;
+
+                    if (takenCount > 0)
                     {
-                        int takenCount = Math.Min(count, availableCount);
-                        int takenInc = SplitInc(availableCount, itemInStorage.inc, takenCount);
-
-                        itemInStorage.count -= takenCount;
-                        itemInStorage.inc -= takenInc;
-
-                        if (takenCount > 0)
-                        {
-                            RecordTake(itemId, takenCount);
-                        }
-
-                        return new int[] { takenCount, takenInc };
+                        RecordTake(itemId, takenCount);
                     }
+
+                    return new int[] { takenCount, takenInc };
                 }
             }
             return new int[] { 0, 0 };
@@ -2139,8 +2439,9 @@ namespace NexusLogistics
                 {
                     itemStats[itemId] = new ItemStats();
                 }
-                itemStats[itemId].AddedHistory.Enqueue(new DataPoint { Timestamp = DateTime.Now, Amount = amount });
-                PruneOldData(itemStats[itemId].AddedHistory);
+                var stats = itemStats[itemId];
+                stats.AddedHistory.Enqueue(new DataPoint { Timestamp = DateTime.Now, Amount = amount });
+                stats.TotalAddedInWindow += amount;
             }
         }
 
@@ -2152,17 +2453,26 @@ namespace NexusLogistics
                 {
                     itemStats[itemId] = new ItemStats();
                 }
-                itemStats[itemId].TakenHistory.Enqueue(new DataPoint { Timestamp = DateTime.Now, Amount = amount });
-                PruneOldData(itemStats[itemId].TakenHistory);
+                var stats = itemStats[itemId];
+                stats.TakenHistory.Enqueue(new DataPoint { Timestamp = DateTime.Now, Amount = amount });
+                stats.TotalTakenInWindow += amount;
             }
         }
 
-        void PruneOldData(Queue<DataPoint> history)
+        void PruneOldData(Queue<DataPoint> history, ItemStats stats, bool isAdd)
         {
             DateTime cutoff = DateTime.Now.AddMinutes(-HistoryMinutes);
             while (history.Count > 0 && history.Peek().Timestamp < cutoff)
             {
-                history.Dequeue();
+                var removedPoint = history.Dequeue();
+                if (isAdd)
+                {
+                    stats.TotalAddedInWindow -= removedPoint.Amount;
+                }
+                else
+                {
+                    stats.TotalTakenInWindow -= removedPoint.Amount;
+                }
             }
         }
 
@@ -2186,6 +2496,14 @@ namespace NexusLogistics
         {
             if (itemId <= 0 || count <= 0) return false;
 
+            lock (remoteStorageLock)
+            {
+                return UnsafeHasItem(itemId, count);
+            }
+        }
+
+        private bool UnsafeHasItem(int itemId, int count = 1)
+        {
             ItemProto item = LDB.items.Select(itemId);
             bool isInfinite = (infItems.Value) ||
                               (infVeins.Value && IsVein(itemId)) ||
@@ -2198,12 +2516,9 @@ namespace NexusLogistics
                 return true;
             }
 
-            lock (remoteStorageLock)
+            if (remoteStorage.ContainsKey(itemId))
             {
-                if (remoteStorage.ContainsKey(itemId))
-                {
-                    return remoteStorage[itemId].count >= count;
-                }
+                return remoteStorage[itemId].count >= count;
             }
             return false;
         }
@@ -2309,12 +2624,6 @@ namespace NexusLogistics
 
         private (string text, Color color) GetProliferationStatus(int count, int inc, int itemId)
         {
-            var tiers = new[] {
-                new { Name = "Mk 3", MinPoints = 4.0, Color = new Color(0.6f, 0.7f, 1f) },
-                new { Name = "Mk 2", MinPoints = 2.0, Color = new Color(0.6f, 1f, 0.6f) },
-                new { Name = "Mk 1", MinPoints = 1.0, Color = new Color(1f, 0.75f, 0.5f) },
-                new { Name = "None", MinPoints = 0.0, Color = Color.grey }
-            };
             const double epsilon = 1e-5;
 
             if (count <= 0) return ("N/A", Color.grey);
@@ -2326,13 +2635,13 @@ namespace NexusLogistics
 
             double pointsPerItem = (double)inc / count;
 
-            for (int i = 0; i < tiers.Length; i++)
+            for (int i = 0; i < proliferationTiers.Length; i++)
             {
-                var currentTier = tiers[i];
+                var currentTier = proliferationTiers[i];
                 if (pointsPerItem >= currentTier.MinPoints - epsilon)
                 {
                     if (i == 0) return (currentTier.Name, currentTier.Color);
-                    var nextTier = tiers[i - 1];
+                    var nextTier = proliferationTiers[i - 1];
                     double tierRange = nextTier.MinPoints - currentTier.MinPoints;
                     double progressInTier = pointsPerItem - currentTier.MinPoints;
                     double percentage = (tierRange > 0) ? (progressInTier / tierRange) * 100.0 : 100.0;
@@ -2395,6 +2704,11 @@ namespace NexusLogistics
                 order.Value.Export(w);
             }
 
+            // Save Trade Route Data (version 7+)
+            w.Write(tradeRoutesTier1);
+            w.Write(tradeRoutesTier2);
+            w.Write(tradeRoutesTier3);
+
             lock (remoteStorageLock)
             {
                 w.Write(remoteStorage.Count);
@@ -2439,6 +2753,19 @@ namespace NexusLogistics
                     int itemId = r.ReadInt32();
                     marketOrders[itemId] = MarketOrder.Import(r, version);
                 }
+            }
+
+            if (version >= 7)
+            {
+                tradeRoutesTier1 = r.ReadInt32();
+                tradeRoutesTier2 = r.ReadInt32();
+                tradeRoutesTier3 = r.ReadInt32();
+            }
+            else
+            {
+                tradeRoutesTier1 = 0;
+                tradeRoutesTier2 = 0;
+                tradeRoutesTier3 = 0;
             }
 
             lock (remoteStorageLock)

@@ -1,6 +1,6 @@
 # NexusLogistics for Dyson Sphere Program
 
-**Version:** 1.8.0
+**Version:** 1.9.0
 
 An unofficial update and feature-rich continuation of the original **PackageLogistic** mod by `qlvlp-com`. NexusLogistics provides a centralized, "magic" logistics network that dramatically simplifies resource management across your entire star cluster, allowing you to focus on designing and expanding your factory.
 
@@ -35,6 +35,7 @@ NexusLogistics creates a global, invisible storage network that acts as a centra
 
 *   **Central Remote Storage:** All items supplied by logistics stations, storage boxes, and miners are pooled into a central "nexus" storage.
 *   **Galactic Market:** A new "Market" tab allows you to buy and sell resources, providing a dynamic way to manage surpluses and acquire missing items.
+*   **Passive Income (Trade Routes):** Purchase "Trade Routes" via the new Contracts tab to generate passive credit income over time.
 *   **Automatic Supply Network:** Buildings that require items (Assemblers, Labs, Power Plants, Turrets, etc.) will automatically draw what they need from the nexus.
 *   **Personal Logistics:** Automatically replenishes filtered items in your main inventory and fills requests in your personal logistics slots.
 *   **Automatic Proliferation:** Items added to the network can be automatically sprayed with Proliferator MK.I, II, or III. This can be toggled to consume proliferator points or be free.
@@ -64,11 +65,11 @@ Once in-game, you can use the following hotkeys to access the mod's features.
 *   **Toggle Main Options Window:** `LeftControl + R`
     *   This window contains the main toggles for enabling the mod, auto-replenishment, auto-spraying, and cheat options.
 *   **Toggle Logistics Window:** `LeftShift + R`
-    *   This is the main hub for your logistics network, containing the Dashboard, Storage, and Market tabs.
+    *   This is the main hub for your logistics network, containing the Dashboard, Storage, Market, and Contracts tabs.
 
 ### Logistics Window Tabs Explained
 
-The main Logistics Window (`LeftShift + R`) is organized into three tabs:
+The main Logistics Window (`LeftShift + R`) is organized into four tabs:
 
 #### Dashboard Tab
 
@@ -91,6 +92,15 @@ This tab allows you to buy and sell items on a galactic market.
 *   **Nested Categories:** The market features nested sub-tabs. First select a primary category (e.g., "Resources"), then a more specific sub-category (e.g., "Raw Materials," "Intermediate Products") to find the items you want to trade.
 *   **Place Orders:** You can place buy and sell orders for items, which will be fulfilled over time.
 *   **View Balance:** Your current credit balance is displayed at the top of this panel.
+
+#### Contracts Tab
+
+This tab allows you to invest your credits into permanent passive income streams.
+
+*   **Trade Routes:** Purchase Tier 1, 2, or 3 trade routes to generate credits every second.
+    *   **Planetary Trade Route:** Low cost, low income.
+    *   **Interstellar Trade Route:** Medium cost, medium income.
+    *   **Galactic Trade Route:** High cost, high income.
 
 ### Main Options Window Panels
 
@@ -133,6 +143,11 @@ If you wish to build the mod yourself:
 4.  Build the solution. The `NexusLogistics.dll` will be generated in the `bin/Debug` or `bin/Release` folder.
 
 ## Changelog
+
+### Version 1.9.0
+* **Feature: Trade Routes (Passive Income):** Introduced a new "Contracts" tab where players can purchase Trade Routes. These provide a steady stream of passive credit income, allowing for a more idle-game style of economy management.
+* **Feature: Contracts UI:** Added a dedicated UI panel for managing trade routes and viewing total passive income.
+* **Refactor:** Updated project structure to use portable paths for easier building.
 
 ### Version 1.8.0
 * **Feature: Fusion Power Auto-Fueling:** Added a new toggleable option to automatically refuel Mini Fusion Power Plants with Deuteron Fuel Rods.
