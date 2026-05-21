@@ -1,6 +1,6 @@
 # NexusLogistics for Dyson Sphere Program
 
-**Version:** 1.9.0
+**Version:** 2.0.0
 
 An unofficial update and feature-rich continuation of the original **PackageLogistic** mod by `qlvlp-com`. NexusLogistics provides a centralized, "magic" logistics network that dramatically simplifies resource management across your entire star cluster, allowing you to focus on designing and expanding your factory.
 
@@ -143,6 +143,12 @@ If you wish to build the mod yourself:
 4.  Build the solution. The `NexusLogistics.dll` will be generated in the `bin/Debug` or `bin/Release` folder.
 
 ## Changelog
+
+### Version 2.0.0
+* **Refactor: Codebase Modularization & State Decoupling:** Reorganized the single large file `NexusLogistics.cs` into distinct, maintainable sub-services (`UIService`, `LogisticsEngine`, `StorageService`, `FactoryProvider`). Decoupled UI rendering logic from internal game-state simulation.
+* **Fix: Power Plant Auto-Refueling:** Corrected swapped item IDs for Deuteron/Antimatter Fuel Rods and swapped case statements, fixing the issue where Artificial Stars would not refuel with Strange Annihilation Fuel Rods.
+* **GC Allocation Optimization:** Removed high-frequency `.ToList()` allocations on every frame within the storage list view GUI loop, significantly reducing GC overhead.
+* **Compatibility:** Updated lab components, sand count methods, and ammo enum checks to align with the *Rise of the Dark Fog* game update.
 
 ### Version 1.9.0
 * **Feature: Trade Routes (Passive Income):** Introduced a new "Contracts" tab where players can purchase Trade Routes. These provide a steady stream of passive credit income, allowing for a more idle-game style of economy management.

@@ -76,7 +76,7 @@ namespace NexusLogistics
     {
         public const string GUID = "com.Sidaril.dsp.NexusLogistics";
         public const string NAME = "NexusLogistics";
-        public const string VERSION = "1.9.0";
+        public const string VERSION = "2.0.0";
         private const int SAVE_VERSION = 7;
 
         private StorageService _storageService;
