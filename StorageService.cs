@@ -120,6 +120,11 @@ namespace NexusLogistics
             return _marketOrders.TryGetValue(itemId, out order);
         }
 
+        public MarketOrder GetMarketOrder(int itemId)
+        {
+            return _marketOrders.TryGetValue(itemId, out var order) ? order : new MarketOrder();
+        }
+
         public IEnumerable<KeyValuePair<int, MarketOrder>> GetAllMarketOrders()
         {
             return _marketOrders.ToArray();

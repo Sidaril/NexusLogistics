@@ -1,6 +1,6 @@
 # NexusLogistics for Dyson Sphere Program
 
-**Version:** 2.0.0
+**Version:** 2.1.0
 
 An unofficial update and feature-rich continuation of the original **PackageLogistic** mod by `qlvlp-com`. NexusLogistics provides a centralized, "magic" logistics network that dramatically simplifies resource management across your entire star cluster, allowing you to focus on designing and expanding your factory.
 
@@ -60,78 +60,65 @@ This mod requires the following to be installed first:
 
 ## How to Use
 
-Once in-game, you can use the following hotkeys to access the mod's features.
+Once in-game, you can access the mod using the following hotkey:
 
-*   **Toggle Main Options Window:** `LeftControl + R`
-    *   This window contains the main toggles for enabling the mod, auto-replenishment, auto-spraying, and cheat options.
 *   **Toggle Logistics Window:** `LeftShift + R`
-    *   This is the main hub for your logistics network, containing the Dashboard, Storage, Market, and Contracts tabs.
+    *   This is the consolidated hub for your logistics network, containing the Dashboard, Storage, Market, and Options tabs.
 
 ### Logistics Window Tabs Explained
 
-The main Logistics Window (`LeftShift + R`) is organized into four tabs:
+The Logistics Window is organized into four tabs:
 
 #### Dashboard Tab
 
 This tab provides actionable insights into the health of your logistics network. It is designed to help you spot and fix supply chain problems before they cause a shutdown.
 
-*   **Bottleneck Detection:** Identifies items where consumption is consistently higher than production over the last 5 minutes.
-*   **Time to Depletion:** For each bottlenecked item, the UI displays an estimated "Time to Depletion," helping you prioritize which shortages to address first.
+*   **Bottleneck Detection:** Identifies items where consumption is consistently higher than production.
+*   **Time to Depletion:** For each bottlenecked item, the UI displays an estimated "Time to Depletion" (ETA), helping you prioritize which shortages to address first.
 
 #### Storage Tab
 
 This tab shows you the current contents of your central remote storage.
 
-*   **Browse Items:** You can browse items by category (Raw, Intermediates, Buildings, etc.) using the sub-tabs.
+*   **Browse Items:** You can browse items by category (Raw, Intermediates, Buildings, Combat, Science Matrices) using the sub-tabs.
 *   **Set Item Limits:** Click on the number in the "Limit" column for any item and type a new value to cap how much of that item the network will store.
 
 #### Market Tab
 
-This tab allows you to buy and sell items on a galactic market.
+This tab allows you to trade resources, place auto orders, and setup trade routes. It is divided into three sub-tabs:
 
-*   **Nested Categories:** The market features nested sub-tabs. First select a primary category (e.g., "Resources"), then a more specific sub-category (e.g., "Raw Materials," "Intermediate Products") to find the items you want to trade.
-*   **Place Orders:** You can place buy and sell orders for items, which will be fulfilled over time.
-*   **View Balance:** Your current credit balance is displayed at the top of this panel.
-
-#### Contracts Tab
-
-This tab allows you to invest your credits into permanent passive income streams.
-
-*   **Trade Routes:** Purchase Tier 1, 2, or 3 trade routes to generate credits every second.
+*   **Manual Trading:** Select a category and sub-category, enter a quantity, and buy or sell resources directly on the galactic market using your credit balance.
+*   **Auto Orders:** Setup automated buy and sell thresholds. When set, items will automatically be bought when network stocks drop below the limit, or sold when they exceed the limit.
+*   **Trade Routes:** Invest your credits into permanent passive income streams that generate credits over time.
     *   **Planetary Trade Route:** Low cost, low income.
     *   **Interstellar Trade Route:** Medium cost, medium income.
     *   **Galactic Trade Route:** High cost, high income.
 
-### Main Options Window Panels
+#### Options Tab
 
-The Main Options Window (`LeftControl + R`) contains global settings and cheats.
+This tab consolidates all general configuration settings and cheats:
 
-#### Main Options Panel
+##### Core Logistics & Spraying Settings
+*   **Enable Nexus Logistics MOD:** The master switch for the entire mod.
+*   **Auto Replenish:** Automatically replenishes items in your backpack that have a filter set (middle-click a slot to set a filter).
+*   **Auto Clean inventory:** Automatically cleans your main inventory by moving items to their corresponding logistic slots.
+*   **Recover from world storage boxes/tanks:** When enabled, the mod will pull items from standard storage containers and liquid tanks into the network.
+*   **Enable Automatic Item Spraying:** Enables automatic proliferation of items in the network.
+*   **Consume Proliferator during spraying:** If checked, this will consume proliferator points from sprayers stored in the network. If unchecked, proliferation is free.
+*   **Allowed Proliferator Tier Limit:** Limit automatic spraying to specific tiers (All Tiers, MK.I Only, MK.II Only, MK.III Only).
 
-*   **Enable Mod:** The master switch for the entire mod.
-*   **Auto Replenish:** Automatically replenishes items in your inventory that have a filter set (middle-click a slot to set a filter).
-*   **Auto Spray:** Enables automatic proliferation of items in the network.
-    *   **Consume Proliferator:** If checked, this will consume proliferator points from the sprayers you have in the network. If unchecked, proliferation is free.
-*   **Recover from storage boxes/tanks:** When enabled, the mod will pull items from standard storage containers and liquid tanks into the network.
-*   **Auto-Replenish Thermal Power Plant Fuel:** Automatically supplies fuel to your thermal power plants. You can select a specific fuel type or leave it on "Auto" to let the mod intelligently choose based on your resource reserves.
-*   **Auto-refuel Fusion Power Plants:** Automatically supplies Deuteron Fuel Rods to your Mini Fusion Power Plants and the best available Antimatter rods to your Artificial Stars.
+##### Auto-refuel Power Plants
+*   **Enable auto-refuel for Thermal Plants:** Automatically supplies fuel to your thermal power plants. You can select a specific fuel type from the dropdown or leave it on "Auto".
+*   **Enable auto-refuel for Fusion/Stars:** Automatically refuels Mini Fusion Power Plants with Deuteron Fuel Rods and Artificial Stars with Antimatter/Strange Annihilation Fuel Rods. You can select a specific fuel type for Artificial Stars from the dropdown or leave it on "Auto".
 
-#### Items Panel
-
-Contains the "infinite" resource toggles. Useful for testing or sandbox-style gameplay.
-
-*   **Infinite Buildings**
-*   **Infinite Minerals**
-*   **Infinite Items**
+##### Infinite Settings (Sandbox Cheats)
+Contains optional "infinite" resource toggles (useful for testing or sandbox play):
+*   **Infinite Buildings placement**
+*   **Infinite Veins and Minerals harvesting**
+*   **Infinite Storage Items** (*Note: Disables achievements in current run*)
 *   **Infinite Soil Pile**
-
-#### Combat Panel
-
-Contains "infinite" toggles for military supplies and a utility button.
-
-*   **Infinite Ammo**
-*   **Infinite Fleet**
-*   **Clear Battlefield Analysis Base:** Removes items from Battlefield Analysis Bases that you have marked to not be picked up, keeping their storage clean.
+*   **Infinite Defense Ammo**
+*   **Infinite Fleet replenishment**
 
 ## Building from Source (Optional)
 
@@ -143,6 +130,11 @@ If you wish to build the mod yourself:
 4.  Build the solution. The `NexusLogistics.dll` will be generated in the `bin/Debug` or `bin/Release` folder.
 
 ## Changelog
+
+### Version 2.1.0
+* **UI Consolidation & UGUI Overhaul:** Merged the old dual-window layout (previously `Ctrl + R` for Options and `Shift + R` for Logistics) into a single unified UGUI-based window toggled via `Shift + R`.
+* **Scroll & Zoom Fix:** Blocked native game camera zooming when scrolling through the lists in the mod UI.
+* **Code Cleanup:** Deleted unused legacy files (`MyConfigWindow.cs`, `MyKeyBinder.cs`) and updated assembly copyright to 2026.
 
 ### Version 2.0.0
 * **Refactor: Codebase Modularization & State Decoupling:** Reorganized the single large file `NexusLogistics.cs` into distinct, maintainable sub-services (`UIService`, `LogisticsEngine`, `StorageService`, `FactoryProvider`). Decoupled UI rendering logic from internal game-state simulation.

@@ -31,7 +31,7 @@
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
-    <OutputPath>$(BepInExDir)\plugins\</OutputPath>
+    <OutputPath>$(BepInExDir)\plugins\Unknown-NexusLogistics.dll\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
@@ -84,6 +84,10 @@
       <HintPath>$(DSPGameDir)\DSPGAME_Data\Managed\UnityEngine.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(DSPGameDir)\DSPGAME_Data\Managed\UnityEngine.UI.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="UnityEngine.CoreModule">
       <HintPath>$(DSPGameDir)\DSPGAME_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
       <Private>False</Private>
@@ -111,7 +115,18 @@
     <Compile Include="FactoryProvider.cs" />
     <Compile Include="LogisticsEngine.cs" />
     <Compile Include="UIService.cs" />
+    <Compile Include="UINexusLogisticsWindow.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="UI\MyCheckButton.cs" />
+    <Compile Include="UI\MyCheckbox.cs" />
+    <Compile Include="UI\MyComboBox.cs" />
+    <Compile Include="UI\MyCornerComboBox.cs" />
+    <Compile Include="UI\MyFlatButton.cs" />
+    <Compile Include="UI\MySideSlider.cs" />
+    <Compile Include="UI\MySlider.cs" />
+    <Compile Include="UI\MyWindow.cs" />
+    <Compile Include="UI\PatchImpl.cs" />
+    <Compile Include="UI\Util.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="CleanSystemFilesFromOutput" AfterTargets="CopyFilesToOutputDirectory">

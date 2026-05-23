@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UnityEngine;
+using NexusLogistics.UI;
 
 namespace NexusLogistics
 {
@@ -76,7 +77,7 @@ namespace NexusLogistics
     {
         public const string GUID = "com.Sidaril.dsp.NexusLogistics";
         public const string NAME = "NexusLogistics";
-        public const string VERSION = "2.0.0";
+        public const string VERSION = "2.1.0";
         private const int SAVE_VERSION = 7;
 
         private StorageService _storageService;
@@ -87,7 +88,7 @@ namespace NexusLogistics
         // Configuration Entries
         private ConfigEntry<bool> autoSpray, costProliferator, infVeins, infItems, infSand, infBuildings, useStorege, autoCleanInventory;
         private ConfigEntry<bool> enableMod, autoReplenishPackage, autoReplenishTPPFuel, autoReplenishFPPFuel, infFleet, infAmmo;
-        private ConfigEntry<KeyboardShortcut> hotKey, storageHotKey;
+        private ConfigEntry<KeyboardShortcut> hotKey;
         private ConfigEntry<UIService.ProliferatorSelection> proliferatorSelection;
         private ConfigEntry<int> fuelId;
         private ConfigEntry<int> starFuelId;
@@ -106,14 +107,14 @@ namespace NexusLogistics
             _uiService = new UIService(_storageService, _logisticsEngine);
 
             InitializeUIService();
+            MyWindowManager.Enable(true);
             
             Logger.LogInfo("NexusLogistics initialized.");
         }
 
         private void BindConfigs()
         {
-            hotKey = Config.Bind("Window Shortcut Key", "Key", new KeyboardShortcut(KeyCode.R, KeyCode.LeftControl));
-            storageHotKey = Config.Bind("Window Shortcut Key", "Storage_Key", new KeyboardShortcut(KeyCode.R, KeyCode.LeftShift));
+            hotKey = Config.Bind("Window Shortcut Key", "Key", new KeyboardShortcut(KeyCode.R, KeyCode.LeftShift));
             enableMod = Config.Bind("Configuration", "EnableMod", true, "Enable MOD");
             autoReplenishPackage = Config.Bind("Configuration", "autoReplenishPackage", true, "Automatically replenish items with filtering enabled in the backpack");
             autoCleanInventory = Config.Bind("Configuration", "AutoCleanInventory", true, "Automatically move items from main inventory to matching logistic slots.");
@@ -189,34 +190,27 @@ namespace NexusLogistics
         {
             if (hotKey.Value.IsDown())
             {
-                _uiService.ShowGUI = !_uiService.ShowGUI;
-            }
-            if (storageHotKey.Value.IsDown())
-            {
-                _uiService.ShowStorageGUI = !_uiService.ShowStorageGUI;
+                _uiService.ToggleWindow(0);
             }
         }
 
         private void RefreshUIData()
         {
-            if (_uiService.ShowStorageGUI)
+            if (_uiService.IsWindowOpen())
             {
                 _storageRefreshTimer += Time.deltaTime;
                 if (_storageRefreshTimer >= StorageRefreshInterval)
                 {
                     _storageRefreshTimer = 0f;
                     _uiService.StorageItemsForGUI = _storageService.GetAllItems();
+                    _uiService.UpdateBottlenecks();
                 }
             }
         }
 
-        void OnGUI()
-        {
-            _uiService.OnGUI();
-        }
-
         void OnDestroy()
         {
+            MyWindowManager.Enable(false);
         }
 
         #region IModCanSave Implementation

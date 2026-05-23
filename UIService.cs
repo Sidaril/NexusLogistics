@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using BepInEx.Configuration;
+using NexusLogistics.UI;
 
 namespace NexusLogistics
 {
@@ -10,34 +11,47 @@ namespace NexusLogistics
     {
         private readonly StorageService _storageService;
         private readonly LogisticsEngine _logisticsEngine;
+        private UINexusLogisticsWindow _window;
 
-        // GUI Styles
-        private GUIStyle windowStyle, labelStyle, buttonStyle, toggleStyle, toolbarStyle, textFieldStyle, scrollViewStyle;
-        private Texture2D borderTexture;
-        private bool guiStylesInitialized = false;
+        // GUI State properties with custom getters/setters for backwards compatibility
+        public bool ShowGUI
+        {
+            get { return _window != null && _window.gameObject.activeSelf && _window.ActiveTabIdx == 3; }
+            set
+            {
+                if (value)
+                {
+                    ToggleWindow(3);
+                }
+                else if (_window != null && _window.ActiveTabIdx == 3)
+                {
+                    _window.Close();
+                }
+            }
+        }
 
-        // GUI State
-        public bool ShowGUI { get; set; }
-        public bool ShowStorageGUI { get; set; }
-        private Rect windowRect = new Rect(700, 250, 600, 500);
-        private Rect storageWindowRect = new Rect(100, 250, 900, 500);
-        private Vector2 storageScrollPosition, mainPanelScrollPosition;
-        private int selectedPanel = 0;
+        public bool ShowStorageGUI
+        {
+            get { return _window != null && _window.gameObject.activeSelf && _window.ActiveTabIdx != 3; }
+            set
+            {
+                if (value)
+                {
+                    ToggleWindow(1);
+                }
+                else if (_window != null && _window.ActiveTabIdx != 3)
+                {
+                    _window.Close();
+                }
+            }
+        }
 
-        public enum StorageCategory { Dashboard, Storage, Market, Contracts }
-        public enum ItemCategory { RawResources, IntermediateProducts, BuildingsAndVehicles, AmmunitionAndCombat, ScienceMatrices }
         public enum ProliferatorSelection { All, Mk1, Mk2, Mk3 }
+        public enum ItemCategory { RawResources, IntermediateProducts, BuildingsAndVehicles, AmmunitionAndCombat, ScienceMatrices }
 
-        private StorageCategory selectedStorageCategory = StorageCategory.Dashboard;
-        private ItemCategory selectedItemCategory = ItemCategory.RawResources;
-        private int marketSubTab = 0; // 0 for Main, 1 for Orders
-
-        private readonly Dictionary<int, string> limitInputStrings = new Dictionary<int, string>();
         private readonly Dictionary<int, string> marketQuantityInputs = new Dictionary<int, string>();
-        private readonly Dictionary<int, string> buyThresholdInputs = new Dictionary<int, string>();
-        private readonly Dictionary<int, string> sellThresholdInputs = new Dictionary<int, string>();
 
-        // Data for GUI (to be updated from main plugin or engine)
+        // Data for GUI (updated from main plugin or engine)
         public IEnumerable<KeyValuePair<int, RemoteStorageItem>> StorageItemsForGUI { get; set; }
         public List<ItemProto> MarketItemsForGUI { get; set; } = new List<ItemProto>();
         public List<ItemProto> AllItemsForMarket { get; set; } = new List<ItemProto>();
@@ -68,6 +82,9 @@ namespace NexusLogistics
         public Dictionary<int, string> StarFuelOptions { get; set; } = new Dictionary<int, string>();
         public int SelectedFuelIndex { get; set; }
         public int SelectedStarFuelIndex { get; set; }
+
+        public StorageService StorageService => _storageService;
+        public LogisticsEngine LogisticsEngine => _logisticsEngine;
 
         private static readonly (string Name, double MinPoints, Color Color)[] proliferationTiers = {
             ("Mk 3", 4.0, new Color(0.6f, 0.7f, 1f)),
@@ -116,8 +133,6 @@ namespace NexusLogistics
 
         private void LoadItemPrices()
         {
-            // Simplified price loading for the refactor
-            // In a real scenario, we'd use the same file logic as before
             ItemPrices = GenerateDefaultPrices();
         }
 
@@ -125,7 +140,6 @@ namespace NexusLogistics
         {
             var prices = new Dictionary<int, long>
             {
-                // Raw Materials - these are the starting point of our graph
                 { 1001, 10 }, { 1002, 10 }, { 1003, 20 }, { 1004, 20 }, { 1005, 30 }, { 1006, 15 },
                 { 1007, 25 }, { 1011, 100 }, { 1012, 100 }, { 1013, 100 }, { 1014, 100 }, { 1015, 150 },
                 { 1016, 200 }, { 1017, 250 }, { 1030, 5 }, { 1031, 10 }, { 1120, 30 }, { 1121, 60 },
@@ -140,7 +154,6 @@ namespace NexusLogistics
             var itemInDegree = new Dictionary<int, int>();
             var recipeDependents = new Dictionary<int, List<int>>();
 
-            // Build the dependency graph and in-degrees
             foreach (var recipe in recipes)
             {
                 int resultItemId = recipe.Results[0];
@@ -162,10 +175,8 @@ namespace NexusLogistics
                 itemInDegree[resultItemId] = degree;
             }
 
-            // Initialize the queue with items that have all their ingredients priced
             var queue = new Queue<int>(itemInDegree.Where(p => p.Value == 0).Select(p => p.Key));
 
-            // Process the queue (topological sort)
             while (queue.Count > 0)
             {
                 int itemIdToPrice = queue.Dequeue();
@@ -183,7 +194,6 @@ namespace NexusLogistics
                     }
                     else
                     {
-                        // This should not happen in a correct topological sort
                         currentPrice = 0;
                         break;
                     }
@@ -194,7 +204,6 @@ namespace NexusLogistics
                     double premium = recipe.Items.Length <= 2 ? 0.6 : (recipe.Items.Length <= 4 ? 0.8 : 1.0);
                     prices[itemIdToPrice] = currentPrice + (long)(currentPrice * premium);
 
-                    // Decrement the in-degree of dependent items
                     if (recipeDependents.TryGetValue(itemIdToPrice, out var dependents))
                     {
                         foreach (var dependentId in dependents)
@@ -215,527 +224,56 @@ namespace NexusLogistics
             return prices;
         }
 
-        public void OnGUI()
+        public void ToggleWindow(int tabIdx = 0)
         {
-            if (!guiStylesInitialized)
+            if (_window == null)
             {
-                InitializeGUIStyles();
-                guiStylesInitialized = true;
-            }
-
-            if (ShowGUI)
-            {
-                windowRect = GUI.Window(0, windowRect, WindowFunction, "Nexus Logistics", windowStyle);
-                DrawWindowBorder(windowRect);
-            }
-            if (ShowStorageGUI)
-            {
-                storageWindowRect = GUI.Window(1, storageWindowRect, StorageWindowFunction, "Logistics", windowStyle);
-                DrawWindowBorder(storageWindowRect);
-            }
-
-            // Prevent click-through to the game world when GUI is active.
-            if ((ShowGUI && windowRect.Contains(Event.current.mousePosition)) || (ShowStorageGUI && storageWindowRect.Contains(Event.current.mousePosition)))
-            {
-                Input.ResetInputAxes();
-            }
-        }
-
-        private void InitializeGUIStyles()
-        {
-            // Load Fonts from Resources
-            Font boldFont = Resources.Load<Font>("fonts/Vipnagorgialla Bd");
-            Font regularFont = Resources.Load<Font>("fonts/Vipnagorgialla Rg");
-
-            // Define Colors
-            Color backgroundColor = new Color(0.05f, 0.1f, 0.15f, 0.85f);
-            Color borderColor = new Color(0.3f, 0.8f, 1.0f, 0.5f);
-            Color textColor = new Color(0.8f, 0.9f, 1.0f, 1.0f);
-            Color highlightColor = new Color(0.3f, 0.8f, 1.0f, 1.0f);
-
-            // Create Texture for Window Background
-            Texture2D windowBackground = new Texture2D(1, 1);
-            windowBackground.SetPixel(0, 0, backgroundColor);
-            windowBackground.Apply();
-
-            // Create Texture for Border
-            borderTexture = new Texture2D(1, 1);
-            borderTexture.SetPixel(0, 0, borderColor);
-            borderTexture.Apply();
-
-            // Window Style
-            windowStyle = new GUIStyle(GUI.skin.window);
-            windowStyle.font = boldFont;
-            windowStyle.fontSize = 16;
-            windowStyle.normal.background = windowBackground;
-            windowStyle.normal.textColor = highlightColor;
-            windowStyle.onNormal.background = windowBackground;
-            windowStyle.border = new RectOffset(1, 1, 1, 1);
-            windowStyle.padding = new RectOffset(10, 10, 25, 10);
-
-            // Label Style
-            labelStyle = new GUIStyle(GUI.skin.label);
-            labelStyle.font = regularFont;
-            labelStyle.fontSize = 14;
-            labelStyle.normal.textColor = textColor;
-
-            // Button Style
-            buttonStyle = new GUIStyle(GUI.skin.button);
-            buttonStyle.font = regularFont;
-            buttonStyle.fontSize = 14;
-            buttonStyle.normal.textColor = textColor;
-            buttonStyle.hover.textColor = highlightColor;
-
-            // Toggle Style
-            toggleStyle = new GUIStyle(GUI.skin.toggle);
-            toggleStyle.font = regularFont;
-            toggleStyle.fontSize = 14;
-            toggleStyle.normal.textColor = textColor;
-            toggleStyle.onNormal.textColor = highlightColor;
-            toggleStyle.hover.textColor = highlightColor;
-
-            // Toolbar Style
-            toolbarStyle = new GUIStyle(GUI.skin.button);
-            toolbarStyle.font = regularFont;
-            toolbarStyle.fontSize = 14;
-            toolbarStyle.normal.textColor = textColor;
-            toolbarStyle.hover.textColor = highlightColor;
-            toolbarStyle.active.textColor = highlightColor;
-            toolbarStyle.onNormal.textColor = highlightColor;
-
-            // TextField Style
-            textFieldStyle = new GUIStyle(GUI.skin.textField);
-            textFieldStyle.font = regularFont;
-            textFieldStyle.fontSize = 14;
-            textFieldStyle.normal.textColor = textColor;
-
-            // ScrollView Style
-            scrollViewStyle = new GUIStyle(GUI.skin.scrollView);
-        }
-
-        private void DrawWindowBorder(Rect rect)
-        {
-            GUI.DrawTexture(new Rect(rect.x, rect.y, rect.width, 1), borderTexture); // Top
-            GUI.DrawTexture(new Rect(rect.x, rect.y + rect.height - 1, rect.width, 1), borderTexture); // Bottom
-            GUI.DrawTexture(new Rect(rect.x, rect.y, 1, rect.height), borderTexture); // Left
-            GUI.DrawTexture(new Rect(rect.x + rect.width - 1, rect.y, 1, rect.height), borderTexture); // Right
-        }
-
-        private void WindowFunction(int windowID)
-        {
-            string[] panels = { "Main Options", "Items", "Combat" };
-            selectedPanel = GUILayout.Toolbar(selectedPanel, panels, toolbarStyle);
-            switch (selectedPanel)
-            {
-                case 0: MainPanel(); break;
-                case 1: ItemPanel(); break;
-                case 2: FightPanel(); break;
-            }
-            GUI.DragWindow();
-        }
-
-        private void StorageWindowFunction(int windowID)
-        {
-            string[] categories = { "Dashboard", "Storage", "Market", "Contracts" };
-            var newCategory = (StorageCategory)GUILayout.Toolbar((int)selectedStorageCategory, categories, toolbarStyle);
-
-            if (newCategory != selectedStorageCategory)
-            {
-                selectedStorageCategory = newCategory;
-                // Reset sub-tabs when changing main tabs for a clean state
-                if (selectedStorageCategory == StorageCategory.Market || selectedStorageCategory == StorageCategory.Storage)
+                _window = MyWindowManager.CreateWindow<UINexusLogisticsWindow>("UINexusLogisticsWindow", "Nexus Logistics");
+                if (_window != null)
                 {
-                    selectedItemCategory = ItemCategory.RawResources;
+                    _window.Init(this);
                 }
             }
 
-            switch (selectedStorageCategory)
+            if (_window != null)
             {
-                case StorageCategory.Dashboard: DashboardPanel(); break;
-                case StorageCategory.Storage: StoragePanel(); break;
-                case StorageCategory.Market: MarketPanel(); break;
-                case StorageCategory.Contracts: ContractsPanel(); break;
-            }
-            GUI.DragWindow();
-        }
-
-        private void MainPanel()
-        {
-            mainPanelScrollPosition = GUILayout.BeginScrollView(mainPanelScrollPosition, false, true, GUI.skin.horizontalScrollbar, GUI.skin.verticalScrollbar, scrollViewStyle);
-            GUILayout.BeginVertical();
-            GUILayout.Space(10);
-            
-            if (EnableMod != null) EnableMod.Value = GUILayout.Toggle(EnableMod.Value, "Enable MOD", toggleStyle);
-            if (AutoReplenishPackage != null) AutoReplenishPackage.Value = GUILayout.Toggle(AutoReplenishPackage.Value, "Auto Replenish Filtered Items", toggleStyle);
-            if (AutoCleanInventory != null) AutoCleanInventory.Value = GUILayout.Toggle(AutoCleanInventory.Value, "Auto Clean Inventory to Logistic Slots", toggleStyle);
-
-            GUILayout.Space(15);
-            GUILayout.BeginHorizontal();
-            if (AutoSpray != null) AutoSpray.Value = GUILayout.Toggle(AutoSpray.Value, "Auto Spray", toggleStyle);
-            if (AutoSpray != null && AutoSpray.Value && CostProliferator != null)
-            {
-                CostProliferator.Value = GUILayout.Toggle(CostProliferator.Value, "Consume Proliferator", toggleStyle);
-            }
-            GUILayout.EndHorizontal();
-
-            if (AutoSpray != null && AutoSpray.Value && ProliferatorSelectionEntry != null)
-            {
-                GUILayout.BeginHorizontal();
-                GUILayout.Label("Proliferator Tier:", labelStyle, GUILayout.Width(120));
-                ProliferatorSelectionEntry.Value = (ProliferatorSelection)GUILayout.Toolbar((int)ProliferatorSelectionEntry.Value, new string[] { "All", "MK.I", "MK.II", "MK.III" }, toolbarStyle);
-                GUILayout.EndHorizontal();
-            }
-
-            GUILayout.Space(15);
-            if (UseStorage != null) UseStorage.Value = GUILayout.Toggle(UseStorage.Value, "Recover from storage boxes/tanks", toggleStyle);
-
-            GUILayout.Space(15);
-            if (AutoReplenishTPPFuel != null) AutoReplenishTPPFuel.Value = GUILayout.Toggle(AutoReplenishTPPFuel.Value, "Auto-refuel Thermal Power Plants", toggleStyle);
-            if (AutoReplenishTPPFuel != null && AutoReplenishTPPFuel.Value && FuelOptions.Count > 0)
-            {
-                SelectedFuelIndex = GUILayout.SelectionGrid(SelectedFuelIndex, FuelOptions.Values.ToArray(), 3, toggleStyle);
-                if (FuelId != null) FuelId.Value = FuelOptions.Keys.ToArray()[SelectedFuelIndex];
-            }
-            
-            if (AutoReplenishFPPFuel != null) AutoReplenishFPPFuel.Value = GUILayout.Toggle(AutoReplenishFPPFuel.Value, "Auto-refuel Fusion Power Plants", toggleStyle);
-            if (AutoReplenishFPPFuel != null && AutoReplenishFPPFuel.Value && StarFuelOptions.Count > 0)
-            {
-                GUILayout.Label("Artificial Star Fuel:", labelStyle);
-                SelectedStarFuelIndex = GUILayout.SelectionGrid(SelectedStarFuelIndex, StarFuelOptions.Values.ToArray(), 3, toggleStyle);
-                if (StarFuelId != null) StarFuelId.Value = StarFuelOptions.Keys.ToArray()[SelectedStarFuelIndex];
-            }
-
-            GUILayout.EndVertical();
-            GUILayout.EndScrollView();
-        }
-
-        private void ItemPanel()
-        {
-            GUILayout.BeginVertical();
-            if (InfBuildings != null) InfBuildings.Value = GUILayout.Toggle(InfBuildings.Value, "Infinite Buildings", toggleStyle);
-            if (InfVeins != null) InfVeins.Value = GUILayout.Toggle(InfVeins.Value, "Infinite Minerals", toggleStyle);
-            if (InfItems != null) InfItems.Value = GUILayout.Toggle(InfItems.Value, "Infinite Items (Disables Achievements)", toggleStyle);
-            if (InfSand != null) InfSand.Value = GUILayout.Toggle(InfSand.Value, "Infinite Soil Pile", toggleStyle);
-            GUILayout.EndVertical();
-        }
-
-        private void FightPanel()
-        {
-            GUILayout.BeginVertical();
-            if (InfAmmo != null) InfAmmo.Value = GUILayout.Toggle(InfAmmo.Value, "Infinite Ammo", toggleStyle);
-            if (InfFleet != null) InfFleet.Value = GUILayout.Toggle(InfFleet.Value, "Infinite Fleet", toggleStyle);
-            GUILayout.Space(15);
-            if (GUILayout.Button(new GUIContent("Clear Banned Items from Battle Bases", "Removes items from Battlefield Analysis Bases that you have marked not to be picked up."), buttonStyle, GUILayout.ExpandWidth(true)))
-            {
-                // This action should probably be handled by a service, but for now we'll leave it as a placeholder
-                // or call a method on the main plugin if we have a reference.
-            }
-            GUILayout.EndVertical();
-        }
-
-        private void DashboardPanel()
-        {
-            storageScrollPosition = GUILayout.BeginScrollView(storageScrollPosition, scrollViewStyle);
-            GUILayout.BeginVertical();
-
-            // Bottlenecks Section
-            GUILayout.Label("Bottlenecks", windowStyle);
-            if (CachedBottlenecks != null && CachedBottlenecks.Any())
-            {
-                foreach (var bottleneck in CachedBottlenecks)
+                if (_window.gameObject.activeSelf && _window.ActiveTabIdx == tabIdx)
                 {
-                    string itemName = LDB.items.Select(bottleneck.ItemId).name;
-                    string deficitText = $"{Math.Abs(bottleneck.DeficitPerMinute)}/min deficit";
-
-                    string etaText = "";
-                    if (bottleneck.DeficitPerMinute < 0)
-                    {
-                        double minutesToDepletion = (double)bottleneck.CurrentStock / Math.Abs(bottleneck.DeficitPerMinute);
-                        etaText = $" (ETA: {FormatDuration(minutesToDepletion)})";
-                    }
-
-                    GUILayout.Label($"{itemName}: {deficitText}{etaText}", labelStyle);
+                    _window.Close();
                 }
-            }
-            else
-            {
-                GUILayout.Label("No potential bottlenecks detected.", labelStyle);
-            }
-
-            GUILayout.EndVertical();
-            GUILayout.EndScrollView();
-        }
-
-        private void StoragePanel()
-        {
-            // Item Category Sub-Tabs
-            string[] itemCategories = { "Raw", "Intermeds", "Buildings", "Combat", "Science" };
-            selectedItemCategory = (ItemCategory)GUILayout.Toolbar((int)selectedItemCategory, itemCategories, toolbarStyle);
-
-            GUILayout.BeginVertical();
-            GUILayout.Space(5);
-
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("Item Name", labelStyle, GUILayout.Width(150));
-            GUILayout.Label("Count", labelStyle, GUILayout.Width(100));
-            GUILayout.Label("Proliferation", labelStyle, GUILayout.Width(100));
-            GUILayout.Label("Limit", labelStyle, GUILayout.Width(100));
-            GUILayout.EndHorizontal();
-
-            storageScrollPosition = GUILayout.BeginScrollView(storageScrollPosition, scrollViewStyle);
-
-            var originalContentColor = GUI.contentColor;
-            try
-            {
-                foreach (var pair in StorageItemsForGUI)
+                else
                 {
-                    int itemId = pair.Key;
-                    RemoteStorageItem item = pair.Value;
-                    ItemProto itemProto = LDB.items.Select(itemId);
-                    if (itemProto == null) continue;
-                    
-                    if (GetItemCategory(itemProto) != selectedItemCategory) continue;
-
-                    string itemName = itemProto.name;
-
-                    if (!limitInputStrings.ContainsKey(itemId))
-                    {
-                        limitInputStrings[itemId] = item.limit.ToString();
-                    }
-
-                    GUILayout.BeginHorizontal();
-                    GUILayout.Label(itemName, labelStyle, GUILayout.Width(150));
-                    GUILayout.Label(item.count.ToString("N0"), labelStyle, GUILayout.Width(100));
-
-                    var (prolifText, prolifColor) = GetProliferationStatus(item.count, item.inc, itemId);
-                    GUI.contentColor = prolifColor;
-                    GUILayout.Label(prolifText, labelStyle, GUILayout.Width(100));
-                    GUI.contentColor = originalContentColor;
-
-                    string currentInput = limitInputStrings[itemId];
-                    string newInput = GUILayout.TextField(currentInput, textFieldStyle, GUILayout.Width(100));
-
-                    if (newInput != currentInput)
-                    {
-                        limitInputStrings[itemId] = newInput;
-                        if (int.TryParse(newInput, out int newLimit) && newLimit >= 0)
-                        {
-                            _storageService.SetItemLimit(itemId, newLimit);
-                        }
-                    }
-                    GUILayout.EndHorizontal();
+                    _window.Open();
+                    _window.SetCurrentTab(tabIdx);
                 }
-            }
-            catch (Exception e)
-            {
-                GUI.contentColor = originalContentColor;
-                GUILayout.Label("Error displaying storage: " + e.Message);
-            }
-            finally
-            {
-                GUI.contentColor = originalContentColor;
-            }
-
-            GUILayout.EndScrollView();
-            GUILayout.EndVertical();
-        }
-
-        private void MarketPanel()
-        {
-            // Sub-tab toolbar for Main/Orders
-            string[] marketSubTabs = { "Main", "Orders" };
-            marketSubTab = GUILayout.Toolbar(marketSubTab, marketSubTabs, toolbarStyle);
-            GUILayout.Space(5);
-
-            // Item category sub-tabs
-            string[] itemCategories = { "Raw", "Intermeds", "Buildings", "Combat", "Science" };
-            selectedItemCategory = (ItemCategory)GUILayout.Toolbar((int)selectedItemCategory, itemCategories, toolbarStyle);
-            GUILayout.Space(10);
-
-            // Balance display
-            GUILayout.Label($"Balance: ${_logisticsEngine.PlayerBalance:N0}", labelStyle);
-            GUILayout.Space(10);
-
-            if (marketSubTab == 0) // 0 for Main
-            {
-                MarketMainPanel();
-            }
-            else if (marketSubTab == 1) // 1 for Orders
-            {
-                MarketOrdersPanel();
             }
         }
 
-        private void MarketMainPanel()
+        public bool IsWindowOpen()
         {
-            // Header
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("Item", labelStyle, GUILayout.Width(150));
-            GUILayout.Label("In Storage", labelStyle, GUILayout.Width(100));
-            GUILayout.Label("Buy Price", labelStyle, GUILayout.Width(100));
-            GUILayout.Label("Sell Price", labelStyle, GUILayout.Width(100));
-            GUILayout.Label("Quantity", labelStyle, GUILayout.Width(100));
-            GUILayout.Label("Actions", labelStyle, GUILayout.Width(200));
-            GUILayout.EndHorizontal();
-
-            storageScrollPosition = GUILayout.BeginScrollView(storageScrollPosition, scrollViewStyle);
-
-            foreach (var itemProto in MarketItemsForGUI)
-            {
-                if (GetItemCategory(itemProto) != selectedItemCategory) continue;
-                
-                if (!ItemPrices.TryGetValue(itemProto.ID, out long basePrice)) continue;
-
-                long sellPrice = basePrice / 5;
-                int currentStock = _storageService.GetItemCount(itemProto.ID);
-
-                if (!marketQuantityInputs.ContainsKey(itemProto.ID))
-                {
-                    marketQuantityInputs[itemProto.ID] = "1";
-                }
-
-                GUILayout.BeginHorizontal();
-                GUILayout.Label(itemProto.name, labelStyle, GUILayout.Width(150));
-                GUILayout.Label(currentStock.ToString("N0"), labelStyle, GUILayout.Width(100));
-                GUILayout.Label($"${basePrice:N0}", labelStyle, GUILayout.Width(100));
-                GUILayout.Label($"${sellPrice:N0}", labelStyle, GUILayout.Width(100));
-
-                string currentInput = marketQuantityInputs[itemProto.ID];
-                string newInput = GUILayout.TextField(currentInput, textFieldStyle, GUILayout.Width(100));
-                if (newInput != currentInput)
-                {
-                    marketQuantityInputs[itemProto.ID] = newInput;
-                }
-
-                if (GUILayout.Button("Buy", buttonStyle, GUILayout.Width(80)))
-                {
-                    BuyItem(itemProto.ID, basePrice);
-                }
-                if (GUILayout.Button("Sell", buttonStyle, GUILayout.Width(80)))
-                {
-                    SellItem(itemProto.ID, sellPrice);
-                }
-
-                GUILayout.EndHorizontal();
-            }
-
-            GUILayout.EndScrollView();
+            return _window != null && _window.gameObject.activeSelf;
         }
 
-        private void MarketOrdersPanel()
+        public void BuyItemPublic(int itemId, long price)
         {
-            // Header
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("Item", labelStyle, GUILayout.Width(150));
-            GUILayout.Label("In Storage", labelStyle, GUILayout.Width(100));
-            GUILayout.Label("Buy Below", labelStyle, GUILayout.Width(100));
-            GUILayout.Label("Sell Above", labelStyle, GUILayout.Width(100));
-            GUILayout.EndHorizontal();
-
-            storageScrollPosition = GUILayout.BeginScrollView(storageScrollPosition, scrollViewStyle);
-
-            foreach (var itemProto in AllItemsForMarket)
-            {
-                if (GetItemCategory(itemProto) != selectedItemCategory) continue;
-                if (!_logisticsEngine.UnlockedItems.Contains(itemProto.ID)) continue;
-
-                int itemId = itemProto.ID;
-                _storageService.TryGetMarketOrder(itemId, out MarketOrder order);
-
-                // Initialize input strings if they don't exist
-                if (!buyThresholdInputs.ContainsKey(itemId)) buyThresholdInputs[itemId] = order?.BuyThreshold.ToString() ?? "0";
-                if (!sellThresholdInputs.ContainsKey(itemId)) sellThresholdInputs[itemId] = order?.SellThreshold.ToString() ?? "0";
-
-                int currentStock = _storageService.GetItemCount(itemId);
-
-                GUILayout.BeginHorizontal();
-                GUILayout.Label(itemProto.name, labelStyle, GUILayout.Width(150));
-                GUILayout.Label(currentStock.ToString("N0"), labelStyle, GUILayout.Width(100));
-
-                // Input fields
-                buyThresholdInputs[itemId] = GUILayout.TextField(buyThresholdInputs[itemId], textFieldStyle, GUILayout.Width(100));
-                sellThresholdInputs[itemId] = GUILayout.TextField(sellThresholdInputs[itemId], textFieldStyle, GUILayout.Width(100));
-
-                // Update logic
-                if (int.TryParse(buyThresholdInputs[itemId], out int buyThreshold) &&
-                    int.TryParse(sellThresholdInputs[itemId], out int sellThreshold))
-                {
-                    _storageService.SetMarketOrder(itemId, buyThreshold, sellThreshold);
-                }
-
-                GUILayout.EndHorizontal();
-            }
-
-            GUILayout.EndScrollView();
+            BuyItem(itemId, price);
         }
 
-        private void ContractsPanel()
+        public void SellItemPublic(int itemId, long price)
         {
-            GUILayout.BeginVertical();
-            GUILayout.Space(10);
+            SellItem(itemId, price);
+        }
 
-            // --- Total Income Display ---
-            long totalIncome = (_logisticsEngine.TradeRoutesTier1 * 1000L) + (_logisticsEngine.TradeRoutesTier2 * 12500L) + (_logisticsEngine.TradeRoutesTier3 * 150000L);
-            GUILayout.Label($"Total Passive Income: ${totalIncome:N0} / second", windowStyle);
-            GUILayout.Label($"Current Balance: ${_logisticsEngine.PlayerBalance:N0}", labelStyle);
-
-            GUILayout.Space(20);
-
-            storageScrollPosition = GUILayout.BeginScrollView(storageScrollPosition, scrollViewStyle);
-
-            // --- Tier 1 ---
-            GUILayout.Label("Planetary Trade Route", labelStyle);
-            GUILayout.Label($"  Cost: ${10000000:N0}", labelStyle);
-            GUILayout.Label($"  Income: ${1000:N0} / second", labelStyle);
-            GUILayout.Label($"  Owned: {_logisticsEngine.TradeRoutesTier1}", labelStyle);
-            if (GUILayout.Button("Buy", buttonStyle, GUILayout.Width(100)))
-            {
-                if (_logisticsEngine.PlayerBalance >= 10000000)
-                {
-                    _logisticsEngine.PlayerBalance -= 10000000;
-                    _logisticsEngine.TradeRoutesTier1++;
-                }
-            }
-            GUILayout.Space(15);
-
-            // --- Tier 2 ---
-            GUILayout.Label("Interstellar Trade Route", labelStyle);
-            GUILayout.Label($"  Cost: ${100000000:N0}", labelStyle);
-            GUILayout.Label($"  Income: ${12500:N0} / second", labelStyle);
-            GUILayout.Label($"  Owned: {_logisticsEngine.TradeRoutesTier2}", labelStyle);
-            if (GUILayout.Button("Buy", buttonStyle, GUILayout.Width(100)))
-            {
-                if (_logisticsEngine.PlayerBalance >= 100000000)
-                {
-                    _logisticsEngine.PlayerBalance -= 100000000;
-                    _logisticsEngine.TradeRoutesTier2++;
-                }
-            }
-            GUILayout.Space(15);
-
-            // --- Tier 3 ---
-            GUILayout.Label("Galactic Trade Route", labelStyle);
-            GUILayout.Label($"  Cost: ${1000000000:N0}", labelStyle);
-            GUILayout.Label($"  Income: ${150000:N0} / second", labelStyle);
-            GUILayout.Label($"  Owned: {_logisticsEngine.TradeRoutesTier3}", labelStyle);
-            if (GUILayout.Button("Buy", buttonStyle, GUILayout.Width(100)))
-            {
-                if (_logisticsEngine.PlayerBalance >= 1000000000)
-                {
-                    _logisticsEngine.PlayerBalance -= 1000000000;
-                    _logisticsEngine.TradeRoutesTier3++;
-                }
-            }
-
-            GUILayout.EndScrollView();
-            GUILayout.EndVertical();
+        public void SetMarketQuantityInput(int itemId, string value)
+        {
+            marketQuantityInputs[itemId] = value;
         }
 
         private void BuyItem(int itemId, long price)
         {
             if (!marketQuantityInputs.TryGetValue(itemId, out string input) || !int.TryParse(input, out int quantity) || quantity <= 0)
             {
-                return; // Invalid quantity
+                return;
             }
 
             long totalCost = price * quantity;
@@ -748,19 +286,19 @@ namespace NexusLogistics
 
             if (affordableQuantity <= 0)
             {
-                return; // Can't afford any
+                return;
             }
 
             long finalCost = price * affordableQuantity;
             _logisticsEngine.PlayerBalance -= finalCost;
-            _logisticsEngine.AddItem(itemId, affordableQuantity, 0, true); // Bypass storage limit for purchases
+            _logisticsEngine.AddItem(itemId, affordableQuantity, 0, true);
         }
 
         private void SellItem(int itemId, long price)
         {
             if (!marketQuantityInputs.TryGetValue(itemId, out string input) || !int.TryParse(input, out int quantity) || quantity <= 0)
             {
-                return; // Invalid quantity
+                return;
             }
 
             int[] takenItems = _logisticsEngine.TakeItem(itemId, quantity);
@@ -772,50 +310,69 @@ namespace NexusLogistics
             }
         }
 
-        private string FormatDuration(double minutes)
+        public void UpdateBottlenecks()
         {
-            if (double.IsInfinity(minutes) || minutes > 60 * 24 * 30) // Cap at 30 days for readability
+            if (GameMain.data == null || GameMain.data.statistics == null || GameMain.data.statistics.production == null)
             {
-                return ">30d";
-            }
-            if (minutes < 1)
-            {
-                return "<1m";
-            }
-            if (minutes < 60)
-            {
-                return $"{minutes:F0}m";
+                return;
             }
 
-            double hours = minutes / 60.0;
-            if (hours < 24)
+            var prodStats = GameMain.data.statistics.production;
+            if (prodStats.factoryStatPool == null) return;
+
+            var productionSpeeds = new Dictionary<int, float>();
+            var consumptionSpeeds = new Dictionary<int, float>();
+
+            foreach (var factoryStat in prodStats.factoryStatPool)
             {
-                int h = (int)hours;
-                int m = (int)Math.Round((hours - h) * 60);
-                return $"{h}h{m:D2}m";
+                if (factoryStat == null) continue;
+                for (int i = 0; i < factoryStat.productCursor; i++)
+                {
+                    var product = factoryStat.productPool[i];
+                    if (product != null && product.itemId > 0)
+                    {
+                        int itemId = product.itemId;
+                        float pSpeed = product.refProductSpeed * 60f;
+                        float cSpeed = product.refConsumeSpeed * 60f;
+
+                        if (productionSpeeds.ContainsKey(itemId))
+                            productionSpeeds[itemId] += pSpeed;
+                        else
+                            productionSpeeds[itemId] = pSpeed;
+
+                        if (consumptionSpeeds.ContainsKey(itemId))
+                            consumptionSpeeds[itemId] += cSpeed;
+                        else
+                            consumptionSpeeds[itemId] = cSpeed;
+                    }
+                }
             }
 
-            double days = hours / 24.0;
-            return $"{days:F1}d";
+            CachedBottlenecks.Clear();
+
+            foreach (var itemId in consumptionSpeeds.Keys)
+            {
+                float prodSpeed = productionSpeeds.ContainsKey(itemId) ? productionSpeeds[itemId] : 0f;
+                float consSpeed = consumptionSpeeds[itemId];
+
+                if (consSpeed > prodSpeed)
+                {
+                    int deficit = (int)Math.Round(prodSpeed - consSpeed);
+                    if (deficit < 0)
+                    {
+                        int stock = _storageService.GetItemCount(itemId);
+                        CachedBottlenecks.Add(new BottleneckInfo
+                        {
+                            ItemId = itemId,
+                            DeficitPerMinute = deficit,
+                            CurrentStock = stock
+                        });
+                    }
+                }
+            }
         }
 
-        private ItemCategory GetItemCategory(ItemProto itemProto)
-        {
-            if (itemProto == null) return ItemCategory.IntermediateProducts;
-            if (itemProto.ID >= 6001 && itemProto.ID <= 6006) return ItemCategory.ScienceMatrices;
-            if (itemProto.isAmmo || itemProto.isFighter) return ItemCategory.AmmunitionAndCombat;
-            if (itemProto.CanBuild) return ItemCategory.BuildingsAndVehicles;
-            if (IsVein(itemProto.ID)) return ItemCategory.RawResources;
-            return ItemCategory.IntermediateProducts;
-        }
-
-        private bool IsVein(int itemId)
-        {
-            int[] items = { ItemIds.Water, ItemIds.SulfuricAcid, ItemIds.Hydrogen, ItemIds.Deuterium };
-            return items.Contains(itemId) || LDB.veins.GetVeinTypeByItemId(itemId) != EVeinType.None;
-        }
-
-        private (string text, Color color) GetProliferationStatus(int count, int inc, int itemId)
+        public (string text, Color color) GetProliferationStatus(int count, int inc, int itemId)
         {
             const double epsilon = 1e-5;
 
